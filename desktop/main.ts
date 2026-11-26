@@ -25,6 +25,10 @@ if (
   app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
 }
 
+// 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
+// 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。
+app.setName('chat-deepseek')
+
 /** 单条请求的兜底超时；Go 侧卡住时渲染层不能永久 pending */
 const REQUEST_TIMEOUT_MS = 10_000
 /** 没打包即视为开发模式（Electron 里 app.isPackaged 比 NODE_ENV 可信） */
@@ -108,11 +112,16 @@ class BackendProcess {
     process.env.CHAT_DEEPSEEK_BIN || path.join(process.cwd(), 'chat-deepseek')
   private unavailableReason = '后端尚未启动'
 
-  constructor(private readonly notify: (method: string, params: unknown) => void) {}
+  constructor(
+    private readonly notify: (method: string, params: unknown) => void,
+    private readonly dataDir: string
+  ) {}
 
   start(): void {
     // Go 侧还没实现 ipc 子命令时，这里会拿到用法错误并退出；不能因此崩掉窗口
-    const child = spawn(this.binary, ['ipc'], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(this.binary, ['ipc', '--data-dir', this.dataDir], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
     this.child = child
 
     child.stdout?.setEncoding('utf8')
@@ -129,7 +138,9 @@ class BackendProcess {
 
     child.on('spawn', () => {
       this.unavailableReason = '后端尚未响应'
-      console.log(`[backend] 已启动 ${this.binary} ipc (pid=${child.pid ?? 'unknown'})`)
+      console.log(
+        `[backend] 已启动 ${this.binary} ipc (pid=${child.pid ?? 'unknown'}，数据目录 ${this.dataDir})`
+      )
       this.notify('event.backend.state', { available: true, binary: this.binary })
     })
 
@@ -379,8 +390,21 @@ function createWindow(): void {
   }
 }
 
+/**
+ * 桌面端管理的数据目录：默认是 `<userData>/data`，与 `ipc` 的 `--data-dir` 一致。
+ * 用 CHAT_DEEPSEEK_DATA_DIR 可以指到别处——比如用户本来就在用 CLI 跑服务，
+ * 要让桌面端管的是同一份数据，而不是一份空目录。
+ */
+function resolveDataDir(): string {
+  const override = process.env.CHAT_DEEPSEEK_DATA_DIR
+  if (override) {
+    return path.resolve(override)
+  }
+  return path.join(app.getPath('userData'), 'data')
+}
+
 function bootstrap(): void {
-  backend = new BackendProcess(sendToRenderer)
+  backend = new BackendProcess(sendToRenderer, resolveDataDir())
   backend.start()
   registerIpc()
   createWindow()

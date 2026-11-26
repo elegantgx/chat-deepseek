@@ -132,7 +132,10 @@ window.host = {
 
 ## 与 Go 的通信
 
-- 启动：`<CHAT_DEEPSEEK_BIN 或 $PWD/chat-deepseek> ipc`，stdio 三根管道都接管。
+- 启动：`<CHAT_DEEPSEEK_BIN 或 $PWD/chat-deepseek> ipc --data-dir <数据目录>`，stdio 三根管道都接管。
+- 数据目录：默认 `<userData>/data`（Linux `~/.config/chat-deepseek/data`，macOS
+  `~/Library/Application Support/chat-deepseek/data`）。用 `CHAT_DEEPSEEK_DATA_DIR` 可以指到别处——
+  用户本来就在用 CLI 跑服务时，要让桌面端管同一份 `data/`，否则看到的是一个空控制台。
 - 协议：NDJSON，一行一个 JSON，信封是 JSON-RPC 2.0 形状。主进程**只按 `id` 配对转发，不解析业务字段**。
 - 请求：`{"jsonrpc":"2.0","id":1,"method":"system.status","params":{}}`
 - 响应：`{"jsonrpc":"2.0","id":1,"result":{...}}`
