@@ -20,6 +20,16 @@ export interface DialogProps {
   className?: string
 }
 
+/** Tab 只在对话框内部循环：模态窗口不能让背景抢走焦点 */
+const FOCUSABLE = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
 export function Dialog({
   open,
   title,
@@ -41,21 +51,62 @@ export function Dialog({
     }
     // Esc 关闭；onClose 不传时视为不可关闭（例如必须做出选择）
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !onClose) {
+      if (event.key === 'Escape') {
+        if (!onClose) {
+          return
+        }
+        event.preventDefault()
+        onClose()
         return
       }
-      event.preventDefault()
-      onClose()
+      if (event.key !== 'Tab' || variant !== 'overlay') {
+        return
+      }
+      const node = dialogRef.current
+      if (!node) {
+        return
+      }
+      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE))
+      if (items.length === 0) {
+        // 没有可聚焦元素时把 Tab 吃掉，避免焦点跑到背景
+        event.preventDefault()
+        node.focus()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      const outside = !node.contains(active)
+      if (event.shiftKey && (outside || active === first)) {
+        event.preventDefault()
+        last.focus()
+        return
+      }
+      if (!event.shiftKey && (outside || active === last)) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
-    // 真正的模态浮层要把焦点收进对话框；contained 只是总览页的样例，不能抢页面焦点
-    if (variant === 'overlay') {
-      dialogRef.current?.focus()
-    }
     return () => {
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [open, onClose, variant])
+
+  useEffect(() => {
+    // contained 只是总览页的样例，不能抢页面焦点
+    if (!open || variant !== 'overlay') {
+      return
+    }
+    const previous = document.activeElement as HTMLElement | null
+    const node = dialogRef.current
+    const target = node?.querySelector<HTMLElement>(FOCUSABLE) ?? node
+    target?.focus()
+    return () => {
+      // 关掉以后焦点回到触发它的按钮，读屏用户不会掉到文档开头
+      previous?.focus()
+    }
+  }, [open, variant])
 
   if (!open) {
     return null

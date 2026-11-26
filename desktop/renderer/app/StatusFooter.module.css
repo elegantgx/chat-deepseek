@@ -1,0 +1,38 @@
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dotOk {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.dotOff {
+  background: var(--text-3);
+}
+
+.dotErr {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.version {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+  padding-left: 13px;
+}

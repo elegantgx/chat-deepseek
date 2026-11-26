@@ -17,6 +17,12 @@ const dev = process.env.NODE_ENV !== 'production'
 const targets = ['chrome >= 105', 'edge >= 105', 'safari >= 16', 'firefox >= 110']
 const desktopRoot = __dirname
 
+// 并行验收多个页面时各写各的目录，免得互相 clean 掉对方的产物；
+// 不设就用默认的 desktop/dist/renderer。
+const outputRoot = process.env.CHAT_DEEPSEEK_RENDERER_OUT
+  ? path.resolve(process.env.CHAT_DEEPSEEK_RENDERER_OUT)
+  : path.resolve(desktopRoot, 'dist/renderer')
+
 const cssLoader = {
   loader: 'builtin:lightningcss-loader',
   options: { targets },
@@ -32,7 +38,7 @@ const config: Configuration = {
     gallery: path.resolve(desktopRoot, 'renderer/gallery/main.tsx'),
   },
   output: {
-    path: path.resolve(desktopRoot, 'dist/renderer'),
+    path: outputRoot,
     // file:// 下按脚本自身位置推导资源地址
     publicPath: 'auto',
     filename: 'assets/[name].[contenthash:8].js',

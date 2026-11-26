@@ -68,5 +68,5 @@ google-chrome --headless=new --no-sandbox --hide-scrollbars \
 
 ## 已知缺口
 
-- Dialog 只有初始聚焦 + Esc，**没有焦点陷阱**：Tab 还能跑到背景上。真实页面接入前要补。
 - Toast 不带定时器，3 秒自动消失由页面调度。
+- Dialog 已做焦点陷阱与关闭后焦点归还，但没有锁 `body` 滚动（桌面端页面自己滚，窗口本身不滚）。
