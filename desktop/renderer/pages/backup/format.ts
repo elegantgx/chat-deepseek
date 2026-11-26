@@ -27,26 +27,6 @@ export function formatBackupSize(bytes: number): string {
   return `${value.toFixed(digits)} ${units[unit]}`
 }
 
-/** `20261127-014421`：新建归档的文件名时间戳，与 CLI 的命名规则一致 */
-export function backupStamp(value: Date): string {
-  return (
-    `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}-` +
-    `${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}`
-  )
-}
-
-/** 本地时区的 RFC 3339 偏移，供新建的样本备份写回 `mtime` */
-export function localRfc3339(value: Date): string {
-  const offsetMinutes = -value.getTimezoneOffset()
-  const sign = offsetMinutes >= 0 ? '+' : '-'
-  const offset = Math.abs(offsetMinutes)
-  return (
-    `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}` +
-    `T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}` +
-    `${sign}${pad(Math.floor(offset / 60))}:${pad(offset % 60)}`
-  )
-}
-
 /** IPC 错误 → `{code}: {message}`，页面只展示这一层，不解析 message 做逻辑 */
 export function formatFailure(failure: { code: string; message: string }): string {
   return `${failure.code}: ${failure.message}`

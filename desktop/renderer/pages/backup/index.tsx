@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PageBody, PageHead, navigate } from '../../app'
+import { PageBody, PageHead, navigate, normalizeHostError, useHost, useRequest } from '../../app'
+import type { HostError } from '../../app'
 import type {
   BackupCreated,
   BackupEntry,
@@ -16,26 +17,14 @@ import {
   Dialog,
   DownloadIcon,
   EmptyState,
+  RefreshIcon,
   Table,
   TextButton,
   Toast,
 } from '../../ui'
 import type { TableColumn, ToastTone } from '../../ui'
 import styles from './backup.module.css'
-import {
-  FAILURE_SAMPLES,
-  INITIAL_BACKUP_LIST,
-  NEW_BACKUP_SIZE,
-  RESTORED_ITEMS,
-  serviceStatus,
-} from './fixtures'
-import {
-  backupStamp,
-  formatBackupSize,
-  formatBackupTime,
-  formatFailure,
-  localRfc3339,
-} from './format'
+import { formatBackupSize, formatBackupTime, formatFailure } from './format'
 
 type OperationKind = 'create' | 'restore' | 'delete'
 
@@ -45,60 +34,54 @@ interface Operation {
   file?: string
 }
 
-interface Scenario {
-  running: boolean
-  empty: boolean
-  dialog: boolean
-  fail: boolean
-}
-
 interface ToastMessage {
   tone: ToastTone
   text: string
 }
 
-/**
- * hash 尾巴给截图脚本和手工验收用：`#backup-running` / `#backup-empty` /
- * `#backup-dialog` / `#backup-fail`。外壳只认页面名和主题，其余由页面自己解释。
- * `#backup-fail` 是失败样本态：创建、恢复、删除分别命中一条 IPC 错误。
- */
-function readScenario(): Scenario {
-  const tokens = window.location.hash.replace(/^#\/?/, '').toLowerCase().split('-')
-  return {
-    running: tokens.includes('running'),
-    empty: tokens.includes('empty'),
-    dialog: tokens.includes('dialog'),
-    fail: tokens.includes('fail'),
-  }
+const FAILURE_PREFIX: Record<OperationKind, string> = {
+  create: '备份失败',
+  restore: '恢复失败',
+  delete: '删除失败',
 }
 
-/** 备份页：列表撑满剩余高度，底部收口条固定，写操作一次只允许一个在途。 */
+/**
+ * 写操作失败按 code 呈现：`unavailable` 的 message 已经是可读原因
+ * （如「服务运行中，备份已暂停」），直接用；其它错误带上 code 便于排查。
+ * 不解析 message 做逻辑判断。
+ */
+function writeFailure(kind: OperationKind, failure: HostError): string {
+  if (failure.code === 'unavailable') {
+    return failure.message
+  }
+  return `${FAILURE_PREFIX[kind]}：${formatFailure(failure)}`
+}
+
+/** 读失败给一句能行动的说明；`unavailable` 的 message 本身已是原因 */
+function readFailure(failure: HostError): string {
+  if (failure.code === 'unavailable') {
+    return failure.message
+  }
+  return `${failure.message}（${failure.code}）`
+}
+
+/**
+ * 备份页：`system.status` 决定警告条与禁用，`backup.list` 提供归档列表。
+ * 两个请求都拿到结果之前不判断服务状态，避免首帧闪一下错误的状态。
+ */
 export function BackupPage() {
-  const [scenario] = useState<Scenario>(readScenario)
-  const [status] = useState<SystemStatus>(() => serviceStatus(scenario.running))
-  const [backupList, setBackupList] = useState<BackupList>(() =>
-    scenario.empty
-      ? { ...INITIAL_BACKUP_LIST, backups: [] }
-      : { ...INITIAL_BACKUP_LIST, backups: [...INITIAL_BACKUP_LIST.backups] }
-  )
+  const host = useHost()
+  const status = useRequest<SystemStatus>('system.status')
+  const list = useRequest<BackupList>('backup.list')
+
   const [operation, setOperation] = useState<Operation | null>(null)
-  const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(() =>
-    scenario.dialog ? INITIAL_BACKUP_LIST.backups[0] : null
-  )
+  const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<BackupEntry | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
 
   /** 同步守卫：state 要等下一次渲染，双击时只靠 state 仍可能排进第二个写操作 */
   const inFlight = useRef<Operation | null>(null)
-  const operationTimer = useRef<number | null>(null)
   const toastTimer = useRef<number | null>(null)
-
-  const backups = backupList.backups
-  const running = status.service.state === 'running'
-  const busy = operation !== null
-  const creating = operation?.kind === 'create'
-  const restoring = operation?.kind === 'restore'
-  const deleting = operation?.kind === 'delete'
 
   const showToast = useCallback((tone: ToastTone, text: string) => {
     setToast({ tone, text })
@@ -116,88 +99,90 @@ export function BackupPage() {
       if (toastTimer.current !== null) {
         window.clearTimeout(toastTimer.current)
       }
-      if (operationTimer.current !== null) {
-        window.clearTimeout(operationTimer.current)
-      }
     }
   }, [])
+
+  const retry = useCallback(() => {
+    status.reload()
+    list.reload()
+  }, [status, list])
+
+  const backups = list.data?.backups ?? []
+  const ready = status.data !== null && list.data !== null
+  const loading = status.loading || list.loading
+  const readError = status.error ?? list.error
+  const canOperate = ready && readError === null
+  const running = status.data?.service.state === 'running'
+  const busy = operation !== null
+  const creating = operation?.kind === 'create'
+  const restoring = operation?.kind === 'restore'
+  const deleting = operation?.kind === 'delete'
+
+  const begin = (next: Operation): boolean => {
+    if (inFlight.current) {
+      return false
+    }
+    inFlight.current = next
+    setOperation(next)
+    return true
+  }
 
   const settle = () => {
     inFlight.current = null
     setOperation(null)
   }
 
-  /** 先占住在途标记再起定时器，保证同一时刻只有一个写操作 */
-  const schedule = (next: Operation, delay: number, finish: () => void) => {
-    if (inFlight.current) {
+  const handleCreate = async () => {
+    if (!canOperate || running || !begin({ kind: 'create' })) {
       return
     }
-    inFlight.current = next
-    setOperation(next)
-    operationTimer.current = window.setTimeout(() => {
-      operationTimer.current = null
-      finish()
-      settle()
-    }, delay)
-  }
-
-  const handleCreate = () => {
-    if (running || inFlight.current) {
-      return
-    }
-    schedule({ kind: 'create' }, 900, () => {
-      if (scenario.fail) {
-        showToast('error', `备份失败：${formatFailure(FAILURE_SAMPLES.serviceRunning)}`)
-        return
-      }
-      const now = new Date()
-      const file = `chat-deepseek-${backupStamp(now)}.zip`
-      const created: BackupCreated = {
-        file,
-        path: `${backupList.dir}/${file}`,
-        size: NEW_BACKUP_SIZE,
-      }
-      setBackupList((current) => ({
-        ...current,
-        backups: [{ ...created, mtime: localRfc3339(now) }, ...current.backups],
-      }))
+    try {
+      const created = (await host.request('backup.create')) as BackupCreated
       showToast('success', `备份已写入 ${created.file}`)
-    })
+      list.reload()
+    } catch (failure: unknown) {
+      showToast('error', writeFailure('create', normalizeHostError(failure)))
+    } finally {
+      settle()
+    }
   }
 
-  const handleRestore = () => {
+  const handleRestore = async () => {
     const target = restoreTarget
-    if (!target || running || inFlight.current) {
+    if (!target || running || !begin({ kind: 'restore', file: target.file })) {
       return
     }
-    schedule({ kind: 'restore', file: target.file }, 800, () => {
-      if (scenario.fail) {
-        showToast('error', `恢复失败：${formatFailure(FAILURE_SAMPLES.missing)}`)
-      } else {
-        const result: BackupRestored = { ok: true, restored: RESTORED_ITEMS }
-        showToast('success', `已恢复 ${result.restored.length} 项`)
-      }
+    try {
+      const result = (await host.request('backup.restore', {
+        file: target.file,
+      })) as BackupRestored
+      showToast('success', `已恢复 ${result.restored.length} 项`)
+      // 恢复会覆盖 config.json/chat.db，列表目录和服务监听都可能变，两个读请求都要重拉
+      list.reload()
+      status.reload()
+    } catch (failure: unknown) {
+      showToast('error', writeFailure('restore', normalizeHostError(failure)))
+    } finally {
       setRestoreTarget(null)
-    })
+      settle()
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const target = deleteTarget
-    if (!target || inFlight.current) {
+    if (!target || !begin({ kind: 'delete', file: target.file })) {
       return
     }
-    schedule({ kind: 'delete', file: target.file }, 600, () => {
-      if (scenario.fail) {
-        showToast('error', `删除失败：${formatFailure(FAILURE_SAMPLES.traversal)}`)
-      } else {
-        setBackupList((current) => ({
-          ...current,
-          backups: current.backups.filter((item) => item.file !== target.file),
-        }))
-        showToast('success', `已删除 ${target.file}`)
-      }
+    try {
+      await host.request('backup.delete', { file: target.file })
+      showToast('success', `已删除 ${target.file}`)
+      list.reload()
+    } catch (failure: unknown) {
+      showToast('error', writeFailure('delete', normalizeHostError(failure)))
+    } finally {
       setDeleteTarget(null)
-    })
+      settle()
+    }
   }
 
   const closeRestore = () => {
@@ -244,7 +229,7 @@ export function BackupPage() {
         actions={
           <Button
             icon={<DownloadIcon size={16} />}
-            disabled={running || busy}
+            disabled={!canOperate || running || busy}
             onClick={handleCreate}
           >
             {creating ? '正在备份…' : '立即备份'}
@@ -252,7 +237,7 @@ export function BackupPage() {
         }
       />
       <PageBody>
-        {running ? (
+        {canOperate && running ? (
           <div className={styles.banner}>
             <AlertTriangleIcon size={16} />
             <span className={styles.bannerText}>服务运行中，备份已暂停。请先停止服务。</span>
@@ -269,7 +254,24 @@ export function BackupPage() {
         ) : null}
 
         <Card grow clip>
-          {backups.length === 0 ? (
+          {readError && !loading ? (
+            <div className={styles.empty}>
+              <EmptyState
+                title="无法读取备份数据"
+                description={readFailure(readError)}
+                icon={<AlertTriangleIcon />}
+                action={
+                  <Button tone="secondary" icon={<RefreshIcon size={16} />} onClick={retry}>
+                    重试
+                  </Button>
+                }
+              />
+            </div>
+          ) : !ready ? (
+            <div className={styles.empty}>
+              <EmptyState title="正在读取备份…" icon={<ArchiveIcon />} />
+            </div>
+          ) : backups.length === 0 ? (
             <div className={styles.empty}>
               <EmptyState
                 title="还没有备份"
@@ -316,15 +318,17 @@ export function BackupPage() {
               />
             </div>
           )}
-          <CardFooter
-            end={
-              <span className={styles.footerDir} title={backupList.dir}>
-                {backupList.dir}
-              </span>
-            }
-          >
-            共 {backups.length} 个备份
-          </CardFooter>
+          {canOperate ? (
+            <CardFooter
+              end={
+                <span className={styles.footerDir} title={list.data?.dir}>
+                  {list.data?.dir}
+                </span>
+              }
+            >
+              共 {backups.length} 个备份
+            </CardFooter>
+          ) : null}
         </Card>
       </PageBody>
 
