@@ -44,6 +44,9 @@ class UiState:
     nav_badges: Mapping[PageId, str]
     page_url: str
     notice: Notice | None
+    #: 仅供页面展示分支（备份页锁视图、账户页“附加组”复选框）；按钮可用性
+    #: 仍然只看 ``buttons`` 里的 Verdict。
+    is_owner: bool = False
 
 
 def _short_path(path: str) -> str:
@@ -204,6 +207,7 @@ def derive_ui(state: AppState, now: datetime) -> UiState:
         nav_badges=_nav_badges(state),
         page_url=rules.page_url(state),
         notice=state.notice,
+        is_owner=bool(state.identity is not None and state.identity.is_owner),
     )
 
 

@@ -241,6 +241,30 @@ class DeriveUiTest(unittest.TestCase):
             self.assertTrue(ui.buttons[action].enabled, action)
         self.assertEqual(ui.buttons[ActionId.TOGGLE_USER].text, "禁用")
 
+    def test_is_owner_true_for_owner(self) -> None:
+        target = local_target()
+        state = base_state(
+            target,
+            hosts={target.key: host_for(target)},
+            identity=identity(groups=("Owner",)),
+        )
+        ui = render.derive_ui(state, NOW)
+        self.assertTrue(ui.is_owner)
+
+    def test_is_owner_false_for_admin_and_anonymous(self) -> None:
+        target = local_target()
+        admin = base_state(
+            target,
+            hosts={target.key: host_for(target)},
+            identity=identity(groups=("Admin",)),
+        )
+        self.assertFalse(render.derive_ui(admin, NOW).is_owner)
+
+        anonymous = base_state(
+            target, hosts={target.key: host_for(target)}
+        )
+        self.assertFalse(render.derive_ui(anonymous, NOW).is_owner)
+
     def test_remote_target_version_and_page_url(self) -> None:
         target = remote_target()
         state = base_state(
