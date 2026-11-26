@@ -604,6 +604,70 @@ class EnsureLoginTest(ControllerTestCase):
         self.assertEqual(len(controller.state.backups), 1)
 
 
+class SetupOwnerTest(ControllerTestCase):
+    def bootstrapped(self, *, initialized: bool) -> tuple[Controller, FakeTransport]:
+        transport = FakeTransport(self.target)
+        transport.script(("info",), info_result(initialized=initialized))
+        controller = self.make_controller(transport=transport)
+        controller.bootstrap()
+        self.drain()
+        return controller, transport
+
+    def test_setup_owner_success_argv_stdin_info_and_prompt(self) -> None:
+        controller, transport = self.bootstrapped(initialized=False)
+        transport.script(("setup",), ok(("setup",), "Owner 已创建\n"))
+        transport.script(("info",), info_result(initialized=True))
+        controller.setup_owner("owner", "pw")
+        self.drain()
+
+        setups = [item for item in transport.calls if item[0][:1] == ("setup",)]
+        self.assertEqual(len(setups), 1)
+        self.assertEqual(
+            setups[0][0],
+            (
+                "setup",
+                "--username",
+                "owner",
+                "--password-stdin",
+                "--data-dir",
+                "/data",
+                "--listen",
+                "127.0.0.1:8090",
+            ),
+        )
+        self.assertEqual(setups[0][1], "pw\n")
+        self.assertEqual(
+            len([argv for argv in transport.argv_calls if argv[0] == "info"]), 2
+        )
+        prompt = controller.state.login
+        self.assertIsNotNone(prompt)
+        assert prompt is not None
+        self.assertEqual(prompt.username, "owner")
+        self.assertEqual(prompt.error, "")
+        self.assert_notice(controller, "Owner 已创建，请登录")
+
+    def test_setup_owner_failure_uses_unified_failure(self) -> None:
+        controller, transport = self.bootstrapped(initialized=False)
+        transport.script(("setup",), failure(("setup",), 1, "已经初始化过"))
+        controller.setup_owner("owner", "pw")
+        self.drain()
+
+        self.assert_dialog(controller, "数据目录已初始化")
+        self.assertIsNone(controller.state.login)
+
+    def test_setup_owner_guard_when_already_initialized(self) -> None:
+        controller, transport = self.bootstrapped(initialized=True)
+        calls_before = len(transport.calls)
+        controller.setup_owner("owner", "pw")
+        self.drain()
+
+        self.assertEqual(len(transport.calls), calls_before)
+        self.assertEqual(
+            transport.calls_for("setup"), []
+        )
+        self.assert_notice(controller, "数据目录已经初始化")
+
+
 class BusyTest(ControllerTestCase):
     def test_user_action_rejected_while_busy(self) -> None:
         controller, transport = self.logged_in()

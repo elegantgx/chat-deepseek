@@ -75,6 +75,20 @@ class CliGateway:
     def logout(self, cancel: CancelCheck | None = None) -> None:
         self._run(commands.logout(self.target), None, cancel)
 
+    def setup(
+        self,
+        username: str,
+        password: str,
+        listen: str = "",
+        cancel: CancelCheck | None = None,
+    ) -> None:
+        """首次创建 Owner；密码只走 stdin，`listen` 为空时不拼参数。"""
+        self._run(
+            commands.setup(self.target, username, password, listen=listen),
+            None,
+            cancel,
+        )
+
     # ---- 账户 ---------------------------------------------------------
 
     def user_add(

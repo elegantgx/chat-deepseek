@@ -215,6 +215,47 @@ class Controller:
             on_failure=lambda error: self._login_failed(error, username),
         )
 
+    def setup_owner(self, username: str, password: str) -> None:
+        """首次创建 Owner；成功后预填登录 sheet，并重读 info。"""
+        if self._closing():
+            return
+        verdict = rules.action_verdict(
+            self._store.state, rules.ActionId.SETUP_OWNER, self._now()
+        )
+        if not verdict.enabled:
+            self._notice(
+                verdict.tooltip or verdict.reason.value,
+                tone=(
+                    NoticeTone.ERROR
+                    if verdict.reason is rules.ActionReason.BUSY
+                    else NoticeTone.WARNING
+                ),
+            )
+            return
+        host = rules.host_config(self._store.state)
+        listen = host.listen if host is not None else ""
+        gateway = self._gateway
+
+        def work(cancel: CancelToken) -> None:
+            gateway.setup(username, password, listen=listen, cancel=cancel)
+
+        self._submit(
+            TaskKey.SETUP,
+            work,
+            blocking=True,
+            on_success=lambda _value: self._setup_finished(username),
+            on_failure=self._fail,
+        )
+
+    def _setup_finished(self, username: str) -> None:
+        self._store.update(
+            lambda state: reducers.login_prompt_set(
+                state, LoginPrompt(username=username)
+            )
+        )
+        self._notice("Owner 已创建，请登录", tone=NoticeTone.SUCCESS)
+        self._queue_info(blocking=False)
+
     def _login_failed(self, error: BaseException, username: str) -> None:
         kind = error.kind if isinstance(error, CommandError) else ErrorKind.UNKNOWN
         if kind is ErrorKind.CANCELLED:
