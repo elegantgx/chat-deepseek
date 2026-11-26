@@ -108,10 +108,12 @@ gui/.venv/bin/python -m unittest discover -s gui/tests
 - 前端：`pnpm type`、`pnpm lint`、`pnpm build` 通过。无自动化测试。
 - **桌面端改为 Electron**（`desktop/`），`gui/`（PySide6）是上一代外壳，只作为行为参考，不再加功能，最终删除。
   渲染层与主进程的桥是 `ipc`；浏览器仍只走 `/api/v1`，两条通道不要混用。
-- `ipc` 控制面（`internal/ipc` + `docs/ipc.md`）已经可用：状态/能力/配置投影、备份增删列、
-  服务启停与日志事件流；`ipcVersion` 为 1，新增方法算兼容增量。
+- `ipc` 控制面（`internal/ipc` + `docs/ipc.md`）已经可用：状态/能力/配置投影与写入、备份增删列、
+  服务启停/安装与日志事件流、`auth.*` 登录态、`account.*` 账户管理；`ipcVersion` 为 1，
+  新增方法算兼容增量。登录态沿用 CLI 会话文件但归属 ipc 进程，TTL 12 小时滑动续期。
 - 桌面端视觉已定稿（`docs/desktop-visual.md`），设计系统在 `desktop/renderer/ui/`，
-  四个页面正在 `desktop/renderer/pages/` 落地；`gui/` 的 Liquid Glass 试验已废弃，不要参考。
+  四个页面（服务/账户/备份/设置）已接真实 `ipc`，浏览器里由 `app/mock-host.ts` 顶着同一份契约；
+  `gui/` 的 Liquid Glass 试验已废弃，不要参考。
 - 已知未覆盖：真机 SSH/systemd、Windows/macOS 桌面端验证、打包与自动更新；Electron 只在本机 Linux 桌面跑过。
 
 细节文档：
