@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
@@ -237,6 +238,24 @@ class BackupsPageTest(unittest.TestCase):
         self.assertIn("初始化", page.lock_hint.text())
         self.assertFalse(page.login_button.isEnabled())
 
+    def test_render_follows_ui_owner_flag(self) -> None:
+        # Owner 身份但投影标记为非 Owner：页面必须听 UiState。
+        state = make_state(identity_value=identity())
+        page, _controller = self._page(state)
+        ui = replace(derive_ui(state, NOW), is_owner=False)
+        page.render(ui, state)
+        self.assertTrue(page.content.isHidden())
+        self.assertFalse(page.lock_view.isHidden())
+        self.assertEqual(page.lock_title.text(), "需要 Owner 登录")
+
+        # 反过来：页面不再自己读 identity.is_owner。
+        admin = make_state(identity_value=identity(groups=("Admin",)))
+        page, _controller = self._page(admin)
+        ui = replace(derive_ui(admin, NOW), is_owner=True)
+        page.render(ui, admin)
+        self.assertFalse(page.content.isHidden())
+        self.assertTrue(page.lock_view.isHidden())
+
     # -- 头部 --------------------------------------------------------------
 
     def test_backup_address_shown_and_copy_copies_full_path(self) -> None:
@@ -357,6 +376,8 @@ class BackupsPageTest(unittest.TestCase):
         self.assertEqual(page.rows[0].title.text(), "2026-11-26 12:00:00")
         self.assertEqual(page.rows[0].subtitle.full_text(), "2026-11-26-120000.zip")
         self.assertEqual(page.rows[0].trailing.text(), "1.2 MB")
+        self.assertFalse(page.content.isHidden())
+        self.assertTrue(page.lock_view.isHidden())
         self.assertTrue(page.empty_widget.isHidden())
 
     def test_empty_state_is_shown(self) -> None:

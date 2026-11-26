@@ -367,8 +367,7 @@ class BackupsPage(Page):
     def render(self, ui: "UiState", state: "AppState | None") -> None:
         if state is None:
             state = self.controller.state
-        identity = state.identity
-        owner = identity is not None and identity.is_owner
+        owner = ui.is_owner
         _set_visible(self.content, owner)
         _set_visible(self.lock_view, not owner)
         if not owner:
