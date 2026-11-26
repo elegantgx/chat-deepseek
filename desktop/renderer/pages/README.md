@@ -4,8 +4,8 @@
 
 ## 约定
 
-- 一个页面一个目录：`<id>/index.tsx` 命名导出 `XxxPage`，本页的样本数据放 `<id>/fixtures.ts`，
-  样式放 `<id>/*.module.css`。页面多就再拆文件，但都留在自己的目录里。
+- 一个页面一个目录：`<id>/index.tsx` 命名导出 `XxxPage`，样式放 `<id>/*.module.css`。
+  页面多就再拆文件，但都留在自己的目录里。
 - 页面结构固定为：
 
   ```tsx
