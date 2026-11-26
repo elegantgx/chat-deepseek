@@ -203,6 +203,9 @@ class FakeController:
     def select_user(self, username) -> None:
         self._record("select_user", username)
 
+    def setup_owner(self, username, password) -> None:
+        self._record("setup_owner", username, password)
+
     def add_user(self, username, password, groups=()) -> None:
         self._record("add_user", username, password, groups)
 

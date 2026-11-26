@@ -23,7 +23,7 @@ from cdgui.domain.facts import (
     HostConfig,
     ServiceStatus,
 )
-from cdgui.domain.rules import ActionId, ActionReason
+from cdgui.domain.rules import ActionId, ActionReason, Verdict
 from cdgui.domain.state import (
     AppState,
     InflightEntry,
@@ -504,6 +504,42 @@ class ApplyTest(unittest.TestCase):
             self.views.service_chip.toolTip(),
             "未安装 systemd 服务（前台运行）",
         )
+
+    def test_apply_verdict_hides_and_shows(self) -> None:
+        widget = Button("启动", kind="primary")
+        render.apply_verdict(
+            widget,
+            Verdict(False, False, "启动", "不可用", ActionReason.BUSY),
+        )
+        self.assertTrue(widget.isHidden())
+        self.assertFalse(widget.isEnabled())
+        self.assertEqual(widget.toolTip(), "不可用")
+
+        render.apply_verdict(
+            widget, Verdict(True, True, "启动", "可用", ActionReason.OK)
+        )
+        self.assertFalse(widget.isHidden())
+        self.assertTrue(widget.isEnabled())
+        self.assertEqual(widget.toolTip(), "可用")
+
+    def test_apply_verdict_writes_text_and_enabled(self) -> None:
+        widget = Button("旧文案", kind="secondary")
+        render.apply_verdict(
+            widget,
+            Verdict(False, True, "新文案", "稍后重试", ActionReason.BUSY),
+        )
+        self.assertEqual(widget.text(), "新文案")
+        self.assertFalse(widget.isEnabled())
+        self.assertEqual(widget.toolTip(), "稍后重试")
+
+    def test_apply_verdict_empty_text_keeps_existing(self) -> None:
+        widget = Button("保留文案", kind="ghost")
+        render.apply_verdict(
+            widget,
+            Verdict(True, True, "", "无文案", ActionReason.OK),
+        )
+        self.assertEqual(widget.text(), "保留文案")
+        self.assertEqual(widget.toolTip(), "无文案")
 
     def test_apply_clears_busy_spinner(self) -> None:
         target = local_target()

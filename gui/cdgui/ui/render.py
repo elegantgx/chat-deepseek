@@ -229,6 +229,19 @@ def _set_tooltip(widget, tooltip: str) -> None:
         widget.setToolTip(tooltip)
 
 
+def apply_verdict(widget, verdict: Verdict) -> None:
+    """把 Verdict 幂等写入一个按钮/控件：visible/enabled/text(非空才写)/tooltip。
+
+    页面（C5c/C5d）用自己的按钮时直接调用这个 helper，不要再各写一份
+    ``setVisible/setEnabled/setToolTip``；空文本保留控件原有文案。
+    """
+    _set_visible(widget, verdict.visible)
+    _set_enabled(widget, verdict.enabled)
+    if verdict.text:
+        _set_text(widget, verdict.text)
+    _set_tooltip(widget, verdict.tooltip)
+
+
 def apply(ui: UiState, views: Views, state: AppState | None = None) -> None:
     """幂等应用 UiState。
 
@@ -266,21 +279,15 @@ def apply(ui: UiState, views: Views, state: AppState | None = None) -> None:
     _set_tooltip(views.status_backup, ui.backup_line)
     help_verdict = ui.buttons.get(ActionId.HELP)
     if help_verdict is not None:
-        _set_enabled(views.status_help, help_verdict.enabled)
-        _set_tooltip(views.status_help, help_verdict.tooltip)
+        apply_verdict(views.status_help, help_verdict)
 
     for action, widget in views.action_buttons.items():
         verdict = ui.buttons.get(action)
-        if verdict is None:
-            continue
-        _set_visible(widget, verdict.visible)
-        _set_enabled(widget, verdict.enabled)
-        if verdict.text:
-            _set_text(widget, verdict.text)
-        _set_tooltip(widget, verdict.tooltip)
+        if verdict is not None:
+            apply_verdict(widget, verdict)
 
     if page is not None:
         page.render(ui, state)
 
 
-__all__ = ["UiState", "apply", "derive_ui"]
+__all__ = ["UiState", "apply", "apply_verdict", "derive_ui"]

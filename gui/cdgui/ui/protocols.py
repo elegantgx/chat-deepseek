@@ -68,6 +68,9 @@ class ControllerProtocol(Protocol):
     def select_user(self, username: str | None) -> None:
         """记录账户选择；按用户名，不按索引。"""
 
+    def setup_owner(self, username: str, password: str) -> None:
+        """首次创建 Owner；数据目录未初始化时账户页空态使用。"""
+
     def add_user(
         self,
         username: str,
