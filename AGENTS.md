@@ -9,7 +9,7 @@
 - 能力：账户登录、多会话与消息分支、流式回复、深度思考、联网搜索、附件、Markdown/代码高亮/KaTeX/Mermaid、中英双语、明暗主题、移动端、语音、历史导入导出。
 - 技术栈：React 18.3、TypeScript 7（strict）、rspack 2、zustand、fflate、katex、prismjs、mermaid；Go 1.27+、SQLite（`modernc.org/sqlite`）、Argon2id、AES-GCM。
 - 运行：Node 22.12+、pnpm、Go 1.27+；前端 dev 8090，Go dev 8091。GNU/Linux 为主要目标，Windows/macOS 也发布。
-- 版本 `0.1.4-official0.1.4`，MIT。
+- 版本 `0.1.5-official0.1.4`，MIT。
 - 部署：便携二进制（`go:embed` 内嵌 Web UI）+ 同级 `data/`，普通用户运行；只通过 HTTP 访问，`file://` 不再支持。
 - GUI：`gui/` 是 PySide6 管理外壳，只拼 `chat-deepseek` 子命令，不碰数据库。
 

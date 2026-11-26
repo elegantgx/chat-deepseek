@@ -74,7 +74,7 @@ function seedLogs(now: Date): string[] {
   const entries: Array<[number, 'INFO' | 'WARN' | 'ERROR', string]> = [
     [-92, 'INFO', 'serve listening on 127.0.0.1:8091'],
     [-88, 'INFO', 'database opened: data/chat.db (journal=wal)'],
-    [-84, 'INFO', 'webui embedded build 0.1.4-official0.1.4'],
+    [-84, 'INFO', 'webui embedded build 0.1.5-official0.1.4'],
     [-61, 'INFO', 'login ok user=gx ip=127.0.0.1'],
     [-57, 'INFO', 'session 9f3c…31 created (branch main)'],
     [-43, 'INFO', 'settings updated: theme=system lang=zh'],
@@ -272,7 +272,7 @@ export function createMockHost(): HostClient {
       listen: '127.0.0.1:8091',
       apiOrigin: 'https://api.deepseek.com',
       backupDir: '/home/<user>/chat-deepseek/data/backups',
-      version: '0.1.4-official0.1.4',
+      version: '0.1.5-official0.1.4',
     },
     backups: flags.emptyBackups ? [] : seedBackups(now),
     accounts: seedAccounts(),

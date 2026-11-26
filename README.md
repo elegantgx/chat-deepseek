@@ -2,7 +2,7 @@
 
 基于 DeepSeek API 的自托管聊天应用：Go 服务端 + React Web 客户端。账户、会话、附件、设置和 API Key 都保存在服务器上，浏览器只保留登录 Cookie 和内存中的 CSRF token。
 
-本项目是 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo) 的 fork，当前版本 `0.1.4-official0.1.4`，代码基线为上游 `v0.1.4`。仓库位于 [GitHub](https://github.com/elegantgx/chat-deepseek)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
+本项目是 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo) 的 fork，当前版本 `0.1.5-official0.1.4`，代码基线为上游 `v0.1.4`。仓库位于 [GitHub](https://github.com/elegantgx/chat-deepseek)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 运行
 

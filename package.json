@@ -1,6 +1,6 @@
 {
   "name": "chat-deepseek",
-  "version": "0.1.4-official0.1.4",
+  "version": "0.1.5-official0.1.4",
   "description": "基于 DeepSeek API 的自托管聊天应用（Go 服务端 + React Web 客户端）。",
   "license": "MIT",
   "private": true,

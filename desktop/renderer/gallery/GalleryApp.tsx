@@ -86,7 +86,7 @@ const LOG_LINES: LogLine[] = [
     id: 'l3',
     time: '22:14:04',
     level: 'info',
-    message: 'webui embedded build 0.1.4-official0.1.4',
+    message: 'webui embedded build 0.1.5-official0.1.4',
   },
   { id: 'l4', time: '22:14:11', level: 'info', message: 'login ok user=gx ip=127.0.0.1' },
   { id: 'l5', time: '22:14:12', level: 'info', message: 'session 9f3c…31 created (branch main)' },
@@ -249,7 +249,7 @@ export function GalleryApp() {
                 <span className={styles.dotOk} aria-hidden="true" />
                 本地 · 运行中
               </div>
-              <div className={styles.version}>0.1.4-official0.1.4</div>
+              <div className={styles.version}>0.1.5-official0.1.4</div>
             </>
           }
         >

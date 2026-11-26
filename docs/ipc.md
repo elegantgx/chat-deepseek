@@ -97,7 +97,7 @@ chat-deepseek ipc [--data-dir <dir>]
 
 | 字段                | 类型                                      | 可空 | 说明                                                 |
 | ------------------- | ----------------------------------------- | ---- | ---------------------------------------------------- |
-| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                   |
+| `version`           | string                                    | 否   | 构建版本，如 `0.1.5-official0.1.4`                   |
 | `dataDir`           | string                                    | 否   | 数据目录绝对路径                                     |
 | `service`           | object                                    | 否   | 服务探测结果                                         |
 | `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                   |
@@ -143,7 +143,7 @@ chat-deepseek ipc [--data-dir <dir>]
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "version": "0.1.4-official0.1.4",
+    "version": "0.1.5-official0.1.4",
     "dataDir": "/home/<user>/chat-deepseek/data",
     "service": {
       "state": "running",
@@ -268,7 +268,7 @@ service.uninstall
     "listen": "127.0.0.1:8091",
     "apiOrigin": "https://api.deepseek.com",
     "backupDir": "/home/<user>/chat-deepseek/data/backups",
-    "version": "0.1.4-official0.1.4"
+    "version": "0.1.5-official0.1.4"
   }
 }
 ```
@@ -755,7 +755,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
     "listen": "127.0.0.1:8091",
     "apiOrigin": "https://api.deepseek.com",
     "backupDir": "/home/<user>/chat-deepseek/data/backups",
-    "version": "0.1.4-official0.1.4"
+    "version": "0.1.5-official0.1.4"
   }
 }
 ```

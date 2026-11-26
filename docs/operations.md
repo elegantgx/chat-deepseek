@@ -90,8 +90,8 @@ GUI：`gui/.venv/bin/python -m unittest discover -s gui/tests`；`gui/.venv` 不
 
 ## 5. 版本与 tag
 
-- `package.json` 版本 `0.1.4-official0.1.4`；major 跟随上游，带 `official` 后缀。它是合法的 semver 预发布版本，排序在 `0.1.4` 之前，不替代正式版。
-- 自己的发布 tag 带 `v`：`v<版本>-official<上游版本>`，例如 `v0.1.4-official0.1.4`，与上游 `vX.Y.Z` 不混用。
+- `package.json` 版本 `0.1.5-official0.1.4`；major 跟随上游，带 `official` 后缀。它是合法的 semver 预发布版本，排序在 `0.1.4` 之前，不替代正式版。
+- 自己的发布 tag 带 `v`：`v<版本>-official<上游版本>`，例如 `v0.1.5-official0.1.4`，与上游 `vX.Y.Z` 不混用。
 - 未明确要求时不要改版本、不要提交 `dist/`。
 
 ## 6. 环境限制
