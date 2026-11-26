@@ -65,6 +65,8 @@ docs/                    架构、GUI、运维细节（见 §8）
 - **GUI 行为**：按钮可见/可用/文案只来自 `domain/rules.action_verdict` → `Verdict`；页面不自己判断权限或服务状态；`AppState` 里不放 `visible/enabled/loading/busy/pending`。
 - **GUI 配置**：`config.gui.json` 为 v3（`connection` + `local`/`ssh` 两段 + 用户名），v1/v2 自动迁移；密码不落盘，只经 stdin/here-doc。
 - **窗口外观**：标题栏、边框、对话框标题栏用系统原生，不做 frameless/透明顶层窗口/自绘外壳。
+  Linux Wayland 会话里装饰由 Chromium 自绘（灰底方角），属既定取舍，不要为它去切 Ozone 平台
+  （`appendSwitch` 只影响子进程，会让 GPU 崩在混合平台上，见 `desktop/README.md`）。
 - **构建产物**：`internal/webui/dist/*` 不提交；改前端后要 `pnpm build` 才会进二进制。
 
 ## 5. 开发与验证

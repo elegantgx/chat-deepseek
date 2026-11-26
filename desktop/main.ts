@@ -8,13 +8,10 @@ import type { HostErrorPayload, HostReply } from './ipc'
 // 主进程的 console 就是排障通道（stderr 转发、后端退出、冒烟标记都靠它）
 /* oxlint-disable no-console */
 
-// Ozone 平台在 main.js 执行之前就选好了：appendSwitch 改不了浏览器进程，
-// 只会把 --ozone-platform 传给 GPU 等子进程，形成「浏览器 Wayland + GPU 走
-// X11/GLX」的混合配置。Mesa iris 在这条路径上会 SIGSEGV（GPU 进程 exit=11），
-// 所以这里不再强行切平台，跟随 Electron 自己的选择。
-// 确实需要 X11（例如要 mutter 画的标题栏）时，在命令行上传：
-//   electron --ozone-platform=x11 desktop/dist/main.js
-// 那时浏览器和 GPU 都是 X11，是否还崩需要在真机上重新验证。
+// 不要在这里切 Ozone 平台：平台在 main.js 执行之前就选好了，appendSwitch 改不了
+// 浏览器进程，只会把 --ozone-platform 传给 GPU 等子进程，形成「浏览器 Wayland +
+// GPU 走 X11/GLX」的混合配置。Mesa iris 在这条路径上会 SIGSEGV（GPU 进程 exit=11），
+// 而系统 Chrome 走纯 Wayland/EGL-GBM 没有问题。跟随 Electron 自己的选择。
 
 // 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
 // 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。

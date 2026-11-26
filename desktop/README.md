@@ -164,7 +164,8 @@ window.host = {
 ## 安全与窗口（固定配置，改之前先对齐）
 
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
-- 窗口 1280×800、最小 1024×680、原生标题栏（不设 `frame` / `titleBarStyle`）。
+- 窗口 1280×800、最小 1024×680，不设 `frame` / `titleBarStyle`
+  （Linux Wayland 下装饰由 Chromium 自绘，见下文）。
 - 窗口 `title` 显式设为 `chat-deepseek`；渲染层 `index.html` 的 `document.title` 同名，加载后不会被改掉。
 - `backgroundColor` 取 `nativeTheme.shouldUseDarkColors`（深色 `#1f1f1f` / 浅色 `#ffffff`），
   并在 `nativeTheme` 更新时同步，避免加载期白闪。
@@ -172,27 +173,21 @@ window.host = {
 - 单实例：`requestSingleInstanceLock()` 失败直接退出；第二个实例只唤起已有窗口。
 - 退出时先给子进程 stdin EOF（协议里的正常关闭），再 `SIGTERM` 兜底。
 
-## 标题栏与 Ozone 平台（Linux）
+## Ozone 平台与窗口装饰（Linux）
 
-**Ozone 平台在 `main.js` 执行之前就已经选好，`app.commandLine.appendSwitch('ozone-platform', …)` 改不了浏览器进程。**
-它只会把 `--ozone-platform` 塞进 GPU 等子进程，形成「浏览器 Wayland + GPU 走 X11/GLX」的混合配置；
-Mesa iris 在这条路径上会 SIGSEGV（`GPU process exited unexpectedly: exit_code=11`），
-而系统 Chrome 走纯 Wayland/EGL-GBM 就没问题。所以主进程**不再强行切平台**，跟随 Electron 自己的选择
-（Wayland 会话就是原生 Wayland，X11 会话就是 X11），GPU 与浏览器始终同一套平台。
+主进程**不切 Ozone 平台**，跟随 Electron 自己的选择（Wayland 会话走原生 Wayland，X11 会话走 X11），
+GPU 与浏览器始终是同一套平台。
 
-代价是 Wayland 会话里窗口装饰由 Chromium 自绘（灰底方角），不是 mutter 画的 Adwaita。
-这是有意的取舍：先保证 GPU 可用，装饰问题单独处理。
+原因：平台在 `main.js` 执行之前就已经选好，`app.commandLine.appendSwitch('ozone-platform', …)`
+改不了浏览器进程，只会把 `--ozone-platform` 塞进 GPU 等子进程，形成「浏览器 Wayland + GPU 走 X11/GLX」
+的混合配置；Mesa iris 在这条路径上会 SIGSEGV（`GPU process exited unexpectedly: exit_code=11`），
+而系统 Chrome 走纯 Wayland/EGL-GBM 没有这个问题。这条混合路径别再引回来。
 
-确实需要 X11（例如要 mutter 的服务器端装饰）时，**必须在真实命令行上传**，不能用 appendSwitch：
+Wayland 会话里的窗口装饰由 Chromium 自绘（灰底方角），不是 compositor 画的 Adwaita；
+灰底和深色 UI 放在一起观感可以接受，所以不为装饰切 X11。仍然不设 `frame: false` / `titleBarStyle`，
+不自绘窗口外壳。
 
-```sh
-./node_modules/.bin/electron --ozone-platform=x11 desktop/dist/main.js
-```
-
-这样浏览器和 GPU 都是 X11。但 GPU 在 XWayland 上是否仍会崩，需要按下面的方法在真机复验；
-打包后的启动器同理，参数要写进 `.desktop` 的 `Exec=` 或启动脚本。
-
-### 怎么确认跑在哪个后端
+需要确认实际跑在哪个后端时：
 
 ```sh
 # Chromium 日志里的 ozone / wayland / x11 行
@@ -201,13 +196,6 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
 # 真有 X 窗口才说明浏览器是 X11（Wayland 窗口不会出现在这里）
 xwininfo -root -tree | grep -i chat-deepseek
 ```
-
-- **X11 会话**：本来就只有服务器端装饰。
-- **Wayland 会话（默认）**：原生 Wayland，装饰由 Chromium 自绘。
-- 没有 `frame: false` / `titleBarStyle`，不自绘窗口外壳。
-
-> 旧结论已作废：`CHAT_DEEPSEEK_OZONE` 环境变量和「Wayland 默认退回 XWayland」的结论都基于
-> `appendSwitch` 测试，实测对浏览器无效（它只影响子进程）。
 
 ## 发版
 
@@ -238,10 +226,9 @@ xwininfo -root -tree | grep -i chat-deepseek
 10. **GPU 崩溃自动退回软件合成**：没有 `/dev/dri`（容器、部分虚拟机）、上次 GPU 崩溃留下的标记、
     显式 `--disable-gpu` 三种情况都直接走软件合成。有 GPU 但驱动/沙箱不让用时，Chromium 会对 GPU 进程
     重试三次后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出；主进程收到第一次
-    `child-process-gone` 就写标记文件 `<userData>/gpu-software` 并带 `--disable-gpu` 重启一次，
-    标记写成功的话下次启动也会直接走软件合成，不会反复崩。想重新试硬件加速：
-    `CHAT_DEEPSEEK_GPU=on` 启动一次（会清掉标记），或删掉那个文件。
-11. **Wayland 窗口装饰**：默认走原生 Wayland，装饰由 Chromium 自绘（灰底方角）；要 mutter 的 Adwaita
-    装饰得在命令行带 `--ozone-platform=x11`，那条路径下 GPU 是否可用要真机复验。其它 compositor 与
-    Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的 `chat-deepseek` 二进制跑通（无窗口、
-    临时 userData、退出码 0）。
+    `child-process-gone` 就写标记文件 `<userData>/gpu-software` 并干净退出（不做 `app.relaunch`，
+    兜底子进程会抢单实例锁、窗口又不显示）。用户重新启动时标记生效，直接走软件合成，不会反复崩。
+    想重新试硬件加速：`CHAT_DEEPSEEK_GPU=on` 启动一次（会清掉标记），或删掉那个文件。
+11. **Wayland 窗口装饰**：Wayland 会话里装饰由 Chromium 自绘（灰底方角），不是 compositor 画的，
+    与深色 UI 并置观感可以接受，不为此切平台。其它 compositor 与 Windows/macOS 未验证。
+    `--smoke` 链路已在 Linux 上用真实的 `chat-deepseek` 二进制跑通（无窗口、临时 userData、退出码 0）。
