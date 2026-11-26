@@ -41,20 +41,31 @@ desktop/
 
 ```sh
 # 1) 类型检查（渲染层）
-pnpm exec tsc -p desktop/tsconfig.json --noEmit
+./node_modules/.bin/tsc -p desktop/tsconfig.json --noEmit
 
 # 2) 主进程 + preload → desktop/dist/main.js、desktop/dist/preload.js
-pnpm exec tsc -p desktop/tsconfig.main.json
+./node_modules/.bin/tsc -p desktop/tsconfig.main.json
 
 # 3) 渲染层 → desktop/dist/renderer/
-pnpm exec rspack build -c desktop/rspack.config.ts
+./node_modules/.bin/rspack build -c desktop/rspack.config.ts
 
 # 4) 启动
-pnpm exec electron desktop/dist/main.js
+./node_modules/.bin/electron desktop/dist/main.js
 
 # 冒烟：不显示窗口，只自检两条链路后自退
-pnpm exec electron desktop/dist/main.js --smoke
+./node_modules/.bin/electron desktop/dist/main.js --smoke
 ```
+
+根 `package.json` 已收录三条等价入口：
+
+```sh
+pnpm desktop:build   # 主进程 tsc + 渲染层 rspack
+pnpm desktop:start   # electron desktop/dist/main.js
+pnpm desktop:check   # 渲染层类型检查
+```
+
+脚本内部写死 `./node_modules/.bin/...`，不依赖 `PATH` 里的 `pnpm` / `npx`（本机 corepack 缓存落在
+只读家目录，用它们启动会失败），也不加 `--no-sandbox`。
 
 `--smoke`（或 `CHAT_DEEPSEEK_SMOKE=1`）**不会在屏幕上弹窗**：窗口始终 `show: false`，永远不调 `show()`。
 它等渲染层 `did-finish-load` 后打印 `[smoke] renderer loaded (window hidden)`，然后走两条链路各打一次真实请求：
@@ -64,37 +75,30 @@ pnpm exec electron desktop/dist/main.js --smoke
 
 800ms 后自动退出；4.5s 内渲染层没加载完会打日志并以退出码 1 结束。冒烟还会用 `mkdtemp` 建一个
 临时 userData（`app.setPath('userData', …)`），**不碰真实配置目录**，也因为单实例锁文件在 userData 里，
-不会和用户正在跑的实例互相干扰；退出时删除该目录。
+不会和用户正在跑的实例互相干扰；退出时删除该目录。所以它适合放进 CI：无窗口、无残留、退出码可判。
+
+**本机环境注意**：这台机器的家目录只读，跑 `--smoke` 也必须先把 `XDG_CONFIG_HOME` 指到可写目录
+（如 `$PWD/tmp/xdg`），否则 Chromium 仍会在启动阶段 SIGTRAP；冒烟只在 userData 上做了隔离，
+`XDG_CONFIG_HOME` 不在它的接管范围内。
 
 正常启动（不加 `--smoke`）仍要求 userData 可写。容器 / HOME 只读的环境里若不指走 userData，
 Chromium 会直接 SIGTRAP，并把 `SingletonCookie` / `SingletonLock` / `SingletonSocket` 落到当前目录：
 
 ```sh
-XDG_CONFIG_HOME=$PWD/tmp/xdg pnpm exec electron desktop/dist/main.js
-# 或者：pnpm exec electron desktop/dist/main.js --user-data-dir=$PWD/tmp/electron-userdata
+XDG_CONFIG_HOME=$PWD/tmp/xdg ./node_modules/.bin/electron desktop/dist/main.js
+# 或者：./node_modules/.bin/electron desktop/dist/main.js --user-data-dir=$PWD/tmp/electron-userdata
 ```
 
 这些只是本地测试参数，不要写进产品启动脚本。
-
-建议在根 `package.json` 加这几个脚本（本骨架没有改根 `package.json`）：
-
-```json
-"desktop:type": "tsc -p desktop/tsconfig.json --noEmit",
-"desktop:build:main": "tsc -p desktop/tsconfig.main.json",
-"desktop:build:renderer": "NODE_ENV=production rspack build -c desktop/rspack.config.ts",
-"desktop:build": "pnpm desktop:build:renderer && pnpm desktop:build:main",
-"desktop:start": "pnpm desktop:build && electron desktop/dist/main.js",
-"desktop:smoke": "pnpm desktop:build && electron desktop/dist/main.js --smoke"
-```
 
 ## 开发热更
 
 ```sh
 # 终端 1：渲染层 dev server（8092，HMR）
-pnpm exec rspack serve -c desktop/rspack.config.ts
+./node_modules/.bin/rspack serve -c desktop/rspack.config.ts
 
 # 终端 2：让主进程加载 dev server 而不是 file://（仅未打包时生效）
-CHAT_DEEPSEEK_RENDERER_URL=http://localhost:8092 pnpm exec electron desktop/dist/main.js
+CHAT_DEEPSEEK_RENDERER_URL=http://localhost:8092 ./node_modules/.bin/electron desktop/dist/main.js
 ```
 
 - 只改 `renderer/**` → HMR 生效，不用重启窗口。
@@ -155,6 +159,7 @@ window.host = {
 
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
 - 窗口 1280×800、最小 1024×680、原生标题栏（不设 `frame` / `titleBarStyle`）。
+- 窗口 `title` 显式设为 `chat-deepseek`；渲染层 `index.html` 的 `document.title` 同名，加载后不会被改掉。
 - `backgroundColor` 取 `nativeTheme.shouldUseDarkColors`（深色 `#1f1f1f` / 浅色 `#ffffff`），
   并在 `nativeTheme` 更新时同步，避免加载期白闪。
 - `show: false`；正常模式 `ready-to-show` 再 `show()`，冒烟模式永不显示。
@@ -163,63 +168,61 @@ window.host = {
 
 ## 标题栏与 Wayland（Linux）
 
-现象：窗口顶栏是灰色老式 GTK 条。可能有两种来源，先确认再动手：
+**当前结论（已实机验证）：Linux Wayland 会话默认退回 XWayland，这是有意识的取舍。**
 
-- 跑在 **XWayland**：边框由 mutter 按 X11 的服务器端装饰画；
-- 已经跑在**原生 Wayland**，但由 Electron/GTK 自己画 CSD（Chromium 149 起原生 Wayland 的客户端装饰
-  是 GTK 主题外观）—— 这种情况下换 switch 没用。
+- 原生 Wayland：Chromium 自绘窗口装饰，是灰底方角；
+- XWayland：由 mutter 画服务器端 Adwaita 装饰（白底圆角、标题居中），且无模糊感——用户认可这一版。
 
-`main.ts` 在 `app.whenReady()` 之前保留了这两个 switch：
+`main.ts` 在 `app.whenReady()` 之前按会话选择平台，窗口 `title` 显式设为 `chat-deepseek`：
 
 ```ts
-app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
-app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform,WaylandWindowDecorations')
+if (
+  process.platform === 'linux' &&
+  process.env.WAYLAND_DISPLAY &&
+  !process.env.CHAT_DEEPSEEK_OZONE
+) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+} else if (process.env.CHAT_DEEPSEEK_OZONE) {
+  app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
+}
 ```
 
-**但在 Electron 45（Chromium 156.0.8078.109）上它们大概率是 no-op**，依据是静态检查（没启动 Electron）：
+- 未设置 `CHAT_DEEPSEEK_OZONE` 时：只有「Linux + 存在 `WAYLAND_DISPLAY`」才切 XWayland；
+  X11 会话和 Windows/macOS 仍交给 Electron 自己选平台。
+- 取舍的代价：XWayland 在分数缩放（125% / 150%）下可能发糊。XWayland 客户端通常按整倍渲染，
+  再由合成器整体缩放，应用侧改不了；接受统一装饰，就接受这个风险。在意清晰度就显式回原生 Wayland。
 
-- `ozone-platform-hint`：上游在 Chromium 140（Electron 38）删除了该开关，因为平台选择默认值就是 `auto`；
-  Electron 45 的二进制里已经查不到这个字符串，只剩 `--ozone-platform`。
-  见 electron/electron#48001 <https://github.com/electron/electron/issues/48001>。
-- `ELECTRON_OZONE_PLATFORM_HINT`：Electron 38 弃用、39 移除（同一个 issue），二进制里也查不到。
-  所以**不要**再用这个环境变量做验证，它在 45 上不生效。
-- `WaylandWindowDecorations`、`UseOzonePlatform`：Electron 45 的二进制里同样查不到；是否被改名或被
-  默认行为吸收，没有确定结论。
+### 覆盖与对照
 
-保留这两个 switch 是按当前决定，不是已验证的修复；是否真的有用只能在用户桌面上看。
+`CHAT_DEEPSEEK_OZONE` 一旦设置，就会被原样追加为 `--ozone-platform`，覆盖上面的默认选择：
+
+```sh
+# 强制原生 Wayland（回到灰底方角的自绘装饰，用于对照）
+CHAT_DEEPSEEK_OZONE=wayland ./node_modules/.bin/electron desktop/dist/main.js
+
+# 强制 XWayland
+CHAT_DEEPSEEK_OZONE=x11 ./node_modules/.bin/electron desktop/dist/main.js
+```
+
+不设置（或设为空字符串）就是上面的默认逻辑。值必须是 Electron/Chromium 认识的平台名，
+写错会让进程在启动阶段失败——这个变量只用于对照，不要配进产品启动脚本。另外 `wayland` 值只在
+Wayland 会话里可用，在纯 X11 会话里设它会因没有 Wayland compositor 而起不来。
+
+> 旧结论保留：`ozone-platform-hint` 在 Chromium 140（Electron 38）被删除，
+> `ELECTRON_OZONE_PLATFORM_HINT` 在 Electron 39 移除，`WaylandWindowDecorations` / `UseOzonePlatform`
+> 在 Electron 45 的二进制里查不到（见 electron/electron#48001）。所以这里用现存的 `--ozone-platform`，
+> 不再追加那两个 no-op switch。
 
 ### 怎么确认跑在哪个后端
 
 ```sh
 # 打开 Chromium 日志，看 ozone / wayland / x11 相关行
-ELECTRON_ENABLE_LOGGING=1 pnpm exec electron desktop/dist/main.js 2>&1 | grep -iE 'ozone|wayland|x11'
-
-# A/B：强制原生 Wayland（这个开关在 Electron 45 里确实存在）
-pnpm exec electron desktop/dist/main.js --ozone-platform=wayland
-
-# A/B：强制 XWayland
-pnpm exec electron desktop/dist/main.js --ozone-platform=x11
+ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1 | grep -iE 'ozone|wayland|x11'
 ```
 
-`--ozone-platform=wayland` 在 X11 会话里会失败或回退，只用于对比，不要写死进产品。
-
-### 各种情况下的预期
-
-- **确实在 XWayland**：标题栏由窗口管理器做服务器端装饰，灰/老式是预期，不是 bug；只能切原生 Wayland 或自绘。
-- **X11 会话**：本来就只有服务器端装饰，不会变成 CSD，看到老式标题栏同样不是 bug。
-- **原生 Wayland**：Chromium 149+ 起客户端装饰是 GTK 主题外观（上游 CEF 的 changelog 可作为参考证据，
-  不是 Electron 官方文档），所以灰色 GTK 顶栏也可能就是 Electron 自己画的 CSD。
-
-### 候选方案（未实施，等用户定）
-
-1. 先用上面的命令确认后端；如果是 XWayland 且值得切，再考虑 `--ozone-platform=wayland`
-   （要按会话判断，别让 X11 用户起不来）；
-2. 自绘标题栏（`frame: false` + `titleBarOverlay`/自己画）—— **违反「原生标题栏」约束**，要用户明确同意；
-3. 降级到 Electron ≤37 可以继续用 `ozone-platform-hint` + `WaylandWindowDecorations` —— 不推荐
-   （旧分支，缺安全更新）；
-4. 等 Electron/Chromium 上游继续改 Wayland CSD 外观。
-
-本骨架没有 `frame: false` / `titleBarStyle`，不会自行换方案。
+- **X11 会话**：本来就只有服务器端装饰，不会出现 CSD，老式标题栏不是 bug。
+- **Wayland 会话**：默认走 XWayland，标题栏归 mutter；`CHAT_DEEPSEEK_OZONE=wayland` 时归 Chromium 自绘。
+- 仍坚持原生标题栏：没有 `frame: false` / `titleBarStyle`，不自绘窗口外壳。
 
 ## 发版
 
@@ -244,7 +247,7 @@ pnpm exec electron desktop/dist/main.js --ozone-platform=x11
    `event.backend.state`。
 7. 热更只验证了「dev server 起得来 + Electron 能加载它」；没有可视环境，没实际观察过改文件后的
    HMR 替换。`pnpm dev` 那套 8090/8091 与桌面端无关，桌面端 dev server 用 8092。
-8. **Wayland 标题栏效果没有实跑验证**（只做了静态改动）：二进制里查得到 `--ozone-platform`，
-   查不到 `ozone-platform-hint` / `WaylandWindowDecorations` / `UseOzonePlatform`（Electron 45，Chromium 156），
-   所以那两个 switch 大概率无效；「是否变成客户端装饰」取决于会话类型和 compositor，必须由用户在自己桌面上看。
-   另外「冒烟不弹窗 + 临时 userData」也只做了静态检查，没启动过 Electron。
+8. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
+   装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
+   对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路（无窗口 + 临时 userData）只做了静态检查，
+   没有在这台机器上实跑。

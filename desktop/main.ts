@@ -8,11 +8,22 @@ import type { HostErrorPayload, HostReply } from './ipc'
 // 主进程的 console 就是排障通道（stderr 转发、后端退出、冒烟标记都靠它）
 /* oxlint-disable no-console */
 
-// 平台选择的现状（2026-11，Electron 45 / Chromium 156）：
-// - ozone-platform-hint 在 Chromium 140（Electron 38）被删掉，平台默认已是 auto；
-// - WaylandWindowDecorations / UseOzonePlatform 这两个 feature 名在 45 的二进制里不存在。
-// 所以这里不再追加任何开关——加了也是 no-op，只会让后来的人误以为问题已修。
-// 窗口装饰的现状、诊断命令和候选方案见 desktop/README.md「标题栏与 Wayland」。
+// 窗口装饰是刻意取舍（2026-11，Electron 45 / Chromium 156），实机结论：
+// - 原生 Wayland 下装饰由 Chromium 自绘，是灰底方角，用户不认可；
+// - 退回 XWayland 后由 mutter 画 Adwaita 装饰（白底圆角、标题居中），无模糊感。
+// 所以 Linux Wayland 会话默认走 XWayland；代价是分数缩放（如 125%）下 XWayland 可能发糊，
+// 可用 CHAT_DEEPSEEK_OZONE=wayland 做对照。仅当用户显式设置该变量时才覆盖默认选择，
+// X11 会话不受影响（保持 Electron 自己的平台判断）。
+// 细节、诊断命令和 A/B 方法见 desktop/README.md「标题栏与 Wayland」。
+if (
+  process.platform === 'linux' &&
+  process.env.WAYLAND_DISPLAY &&
+  !process.env.CHAT_DEEPSEEK_OZONE
+) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+} else if (process.env.CHAT_DEEPSEEK_OZONE) {
+  app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
+}
 
 /** 单条请求的兜底超时；Go 侧卡住时渲染层不能永久 pending */
 const REQUEST_TIMEOUT_MS = 10_000
@@ -303,6 +314,7 @@ function registerIpc(): void {
 
 function createWindow(): void {
   const win = new BrowserWindow({
+    title: 'chat-deepseek',
     width: 1280,
     height: 800,
     minWidth: 1024,

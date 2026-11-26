@@ -10,7 +10,10 @@
     "build": "rm -rf dist && NODE_ENV=production rspack build -c rspack.config.ts && node scripts/embed-ui.mjs",
     "type": "tsc -p tsconfig.json",
     "lint": "oxlint src rspack.config.ts",
-    "format": "oxfmt --write ."
+    "format": "oxfmt --write .",
+    "desktop:build": "NODE_ENV=production ./node_modules/.bin/tsc -p desktop/tsconfig.main.json && ./node_modules/.bin/rspack build -c desktop/rspack.config.ts",
+    "desktop:start": "./node_modules/.bin/electron desktop/dist/main.js",
+    "desktop:check": "./node_modules/.bin/tsc -p desktop/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@types/katex": "^0.16.5",
