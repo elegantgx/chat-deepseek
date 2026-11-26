@@ -165,6 +165,12 @@ type serviceStopResult struct {
 type serviceInstallResult struct {
 	OK       bool   `json:"ok"`
 	UnitPath string `json:"unitPath"`
+	// Enabled 表示安装时是否执行了 enable（开机自启）；输入与结果分开投影，
+	// 界面不用自己猜 enable 是否真的成功。
+	Enabled bool `json:"enabled"`
+	// Warnings 是给用户看的提示（例如 linger 未开启），必须随结果返回，
+	// 不能只写 stderr——桌面端看不到 ipc 的 stderr。
+	Warnings []string `json:"warnings"`
 }
 
 type serviceLogsResult struct {
@@ -451,18 +457,24 @@ func (s *Server) serviceLogs(params json.RawMessage) (any, *rpcError) {
 }
 
 // serviceInstall 复用 internal/service 的用户级 unit 安装逻辑；IPC 不提供
-// --system/--enable 参数。force=true 对应 CLI 的 --force，用于桌面端「重新安装」。
+// --system 参数。force=true 对应 CLI 的 --force，用于桌面端「重新安装」；
+// enable=true 对应 CLI 的 --enable，安装时顺手设置开机自启。
 func (s *Server) serviceInstall(params json.RawMessage) (any, *rpcError) {
-	payload := struct {
-		Force *bool `json:"force"`
-	}{}
+	fields := map[string]json.RawMessage{}
 	trimmed := strings.TrimSpace(string(params))
 	if trimmed != "" && trimmed != "null" {
-		if err := json.Unmarshal(params, &payload); err != nil {
-			return nil, badRequestError("参数必须是 JSON 对象且 force 为布尔值")
+		if err := json.Unmarshal(params, &fields); err != nil {
+			return nil, badRequestError("参数必须是 JSON 对象")
 		}
 	}
-	force := payload.Force != nil && *payload.Force
+	force, rpcErr := optionalBoolParam(fields, "force")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	enable, rpcErr := optionalBoolParam(fields, "enable")
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
 
 	if !s.beginServiceOp() {
 		return nil, unavailableError("服务操作正在进行，请稍候")
@@ -494,16 +506,38 @@ func (s *Server) serviceInstall(params json.RawMessage) (any, *rpcError) {
 		Scope:   service.ScopeUser,
 		DataDir: s.dataDir,
 		Binary:  binary,
+		Enable:  enable,
 		Force:   force,
 	})
 	if err != nil {
 		return nil, serviceOperationError(err)
 	}
-	// warnings 只写 stderr，不塞进契约字段；GUI 需要诊断时看日志。
-	for _, warning := range result.Warnings {
-		s.logf("%s", warning)
+	warnings := result.Warnings
+	if warnings == nil {
+		warnings = []string{}
 	}
-	return serviceInstallResult{OK: true, UnitPath: result.UnitPath}, nil
+	// warnings 是用户可见信息（例如 linger 提示），随结果返回给界面；
+	// 不再写 stderr，否则桌面端只会把它当成前缀日志。
+	return serviceInstallResult{
+		OK:       true,
+		UnitPath: result.UnitPath,
+		Enabled:  result.Enabled,
+		Warnings: warnings,
+	}, nil
+}
+
+// optionalBoolParam 解析可选布尔参数：缺省、null 都按 false；类型不合法时
+// message 以字段名开头，桌面端可以直接对应到表单字段。
+func optionalBoolParam(fields map[string]json.RawMessage, name string) (bool, *rpcError) {
+	raw, ok := fields[name]
+	if !ok || strings.TrimSpace(string(raw)) == "null" {
+		return false, nil
+	}
+	var value bool
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false, badRequestError(name + " 必须是布尔值")
+	}
+	return value, nil
 }
 
 // serviceUninstall 停止并删除用户级 unit；unit 本来就不存在时仍返回 ok，

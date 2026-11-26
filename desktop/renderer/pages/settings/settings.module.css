@@ -271,6 +271,173 @@
   color: var(--text-2);
 }
 
+/* 安装对话框：信息、开关、linger 与 warnings 全部留在正文里，不挤在 Toast */
+.installBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  margin-top: var(--sp-8);
+}
+
+.installMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  margin: 0;
+  padding: var(--sp-10) var(--sp-12);
+  border-radius: var(--r-8);
+  background: var(--sunken);
+}
+
+.installMetaRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+}
+
+.installMetaLabel {
+  flex: none;
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}
+
+.installMetaValue {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-2);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.installOptionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-16);
+  min-height: 40px;
+  padding-top: var(--sp-10);
+  border-top: 1px solid var(--line);
+}
+
+.installOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.installOptionLabel {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.installOptionHint {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}
+
+.installToggle {
+  flex: none;
+  margin-left: auto;
+}
+
+.lingerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding-top: var(--sp-10);
+  border-top: 1px solid var(--line);
+}
+
+.lingerHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+
+.lingerOn {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--success-ink);
+  text-align: right;
+}
+
+.lingerOff {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--warning-ink);
+  text-align: right;
+}
+
+.lingerCommandRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.lingerCommand {
+  min-width: 0;
+  flex: 1;
+  height: 30px;
+  padding: 0 var(--sp-10);
+  border: 0;
+  border-radius: var(--r-6);
+  background: var(--sunken);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+}
+
+.lingerCommand:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.installError {
+  margin: 0;
+  padding: var(--sp-8) var(--sp-10);
+  border-radius: var(--r-8);
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  overflow-wrap: anywhere;
+}
+
+.installWarnings {
+  padding: var(--sp-10) var(--sp-12);
+  border-radius: var(--r-8);
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+
+.installWarningsTitle {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-semibold);
+}
+
+.installWarningList {
+  margin: 0;
+  padding-left: var(--sp-16);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  overflow-wrap: anywhere;
+}
+
+.installWarningList li + li {
+  margin-top: var(--sp-4);
+}
+
 /*
  * 深色首帧截图时，主题切换和按钮 0.12s 的底色过渡会赛跑，禁用态会短暂保留浅色残影。
  * 禁用态本来就没有交互反馈需要过渡，这里单独关掉。

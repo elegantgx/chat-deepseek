@@ -28,6 +28,8 @@ export interface SystemStatus {
     installed: boolean
     /** 当前平台是否有可用的 systemd 用户管理器 */
     supported: boolean
+    /** loginctl 的 linger 是否开启；未开启时注销后 systemd 用户服务会停止 */
+    linger: boolean
   }
 }
 
@@ -98,6 +100,15 @@ export interface ServiceStartResult {
 
 export interface ServiceStopResult {
   state: 'stopped'
+}
+
+/** `service.install` 的结果；warnings 是用户可见提示（例如 linger 未开启），没有时是 [] */
+export interface ServiceInstallResult {
+  ok: true
+  unitPath: string
+  /** 安装时是否成功执行了 enable（开机自启） */
+  enabled: boolean
+  warnings: string[]
 }
 
 export interface ServiceLogsResult {

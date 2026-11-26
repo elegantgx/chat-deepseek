@@ -10,6 +10,7 @@ import type {
   ConfigProjection,
   ServiceLogEvent,
   ServiceLogsResult,
+  ServiceInstallResult,
   ServiceMode,
   ServiceStartResult,
   ServiceStopResult,
@@ -212,7 +213,11 @@ interface MockState {
   installed: boolean
   /** 当前由谁托管：启停会改写，安装/卸载也会切换，和状态卡「管理方式」对应 */
   mode: ServiceMode
+  /** loginctl linger 是否开启；默认 false，hash 带 -linger 时打开 */
+  linger: boolean
   unitPath: string
+  /** 浏览器替身不真开浏览器，只记录最后一次 desktop.openUrl，方便调试核对 */
+  lastOpenUrl: string | null
   /** `desktop.dataDir.set` 保存的待生效目录；current 不跟着变，模拟重启后生效 */
   savedDataDir: string
   config: ConfigProjection
@@ -224,7 +229,8 @@ interface MockState {
 
 /**
  * hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、
- * `statuserr` 状态读失败、`-systemd` 初始装了 unit、`-uninstalled` 是默认本地态的显式别名。
+ * `statuserr` 状态读失败、`-systemd` 初始装了 unit、`-linger` linger 已开启、
+ * `-uninstalled` 是默认本地态的显式别名。
  */
 function hashFlags(): {
   running: boolean
@@ -232,6 +238,7 @@ function hashFlags(): {
   signedOut: boolean
   statusError: boolean
   systemd: boolean
+  linger: boolean
 } {
   const raw = window.location.hash.replace(/^#\/?/, '')
   return {
@@ -241,6 +248,7 @@ function hashFlags(): {
     signedOut: /(^|-)login($|-)/.test(raw),
     statusError: /(^|-)statuserr($|-)/.test(raw),
     systemd: /(^|-)systemd($|-)/.test(raw),
+    linger: /(^|-)linger($|-)/.test(raw),
   }
 }
 
@@ -255,7 +263,9 @@ export function createMockHost(): HostClient {
     installed: flags.systemd,
     // 没装 unit 时运行中是 ipc 托管的本地进程；装了 unit 则归 systemd。
     mode: flags.systemd ? 'systemd' : flags.running ? 'process' : 'none',
+    linger: flags.linger,
     unitPath: '~/.config/systemd/user/chat-deepseek.service',
+    lastOpenUrl: null,
     savedDataDir: '',
     config: {
       dataDir: '/home/<user>/chat-deepseek/data',
@@ -295,6 +305,7 @@ export function createMockHost(): HostClient {
       installed: state.installed,
       // 浏览器替身只在 Linux 桌面做验收，systemd 能力固定为可用。
       supported: true,
+      linger: state.linger,
     },
   })
 
@@ -376,6 +387,7 @@ export function createMockHost(): HostClient {
         'account.delete',
         'desktop.dataDir',
         'desktop.dataDir.set',
+        'desktop.openUrl',
       ],
       features: {
         systemd: true,
@@ -407,6 +419,21 @@ export function createMockHost(): HostClient {
         envOverride: null,
         restartRequired: true,
       }
+    },
+    /** 与主进程同名方法一致：只接受 http/https，替身不真的打开窗口 */
+    'desktop.openUrl': (params) => {
+      const url = requireString(requireObject(params).url, 'url')
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        fail('bad_request', 'url 不是合法的 URL')
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        fail('bad_request', 'url 只接受 http/https 地址')
+      }
+      state.lastOpenUrl = parsed.href
+      return { ok: true }
     },
     'config.set': (params) => {
       const payload = requireObject(params)
@@ -553,11 +580,31 @@ export function createMockHost(): HostClient {
       const lines = state.logs.slice(-tail)
       return { lines, truncated } satisfies ServiceLogsResult
     },
-    'service.install': () => {
+    'service.install': (params) => {
+      const payload = params === undefined || params === null ? {} : requireObject(params)
+      const enable = payload.enable === undefined ? false : payload.enable
+      if (typeof enable !== 'boolean') {
+        fail('bad_request', 'enable 必须是布尔值')
+      }
+      if (payload.force !== undefined && typeof payload.force !== 'boolean') {
+        fail('bad_request', 'force 必须是布尔值')
+      }
       state.installed = true
       // 安装 unit 属于高级功能：之后由 systemd 托管，状态卡的管理方式随之切换。
       state.mode = 'systemd'
-      return { ok: true, unitPath: state.unitPath }
+      // 与 Go 侧一致：linger 未开启时必须把提示随结果返回，不能只写日志。
+      const warnings: string[] = []
+      if (!state.linger) {
+        warnings.push(
+          '未开启 linger：注销后服务会停止。以该用户执行：loginctl enable-linger <user>'
+        )
+      }
+      return {
+        ok: true,
+        unitPath: state.unitPath,
+        enabled: enable,
+        warnings,
+      } satisfies ServiceInstallResult
     },
     'service.uninstall': () => {
       if (!state.installed) {

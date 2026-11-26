@@ -1,8 +1,10 @@
 package ipc
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -77,6 +79,107 @@ func TestServiceInstallForceParam(t *testing.T) {
 	fake.mu.Unlock()
 	if after != before {
 		t.Fatalf("参数非法时不应调用 Install（before=%d after=%d）", before, after)
+	}
+}
+
+func TestServiceInstallEnableParam(t *testing.T) {
+	server, dir := newTestServer(t, "127.0.0.1:1")
+	seedActiveOwner(t, dir)
+	fake := &fakeServiceController{
+		installResult: service.InstallResult{UnitPath: "/tmp/chat-deepseek.service"},
+	}
+	useFakeService(server, fake)
+
+	cases := []struct {
+		name   string
+		params json.RawMessage
+		want   bool
+	}{
+		{name: "缺省", params: nil, want: false},
+		{name: "null", params: json.RawMessage(`null`), want: false},
+		{name: "false", params: json.RawMessage(`{"enable":false}`), want: false},
+		{name: "true", params: json.RawMessage(`{"enable":true}`), want: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, rpcErr := server.serviceInstall(testCase.params); rpcErr != nil {
+				t.Fatalf("service.install: %+v", rpcErr)
+			}
+			fake.mu.Lock()
+			enable := fake.lastInstall.Enable
+			fake.mu.Unlock()
+			if enable != testCase.want {
+				t.Fatalf("InstallOptions.Enable = %v，期望 %v", enable, testCase.want)
+			}
+		})
+	}
+}
+
+func TestServiceInstallInvalidEnable(t *testing.T) {
+	server, dir := newTestServer(t, "127.0.0.1:1")
+	seedActiveOwner(t, dir)
+	fake := &fakeServiceController{installResult: service.InstallResult{UnitPath: "/tmp/x"}}
+	useFakeService(server, fake)
+
+	_, rpcErr := server.serviceInstall(json.RawMessage(`{"enable":"yes"}`))
+	if rpcErr == nil || rpcErr.Code != codeBadRequest {
+		t.Fatalf("非法 enable = %+v，期望 bad_request", rpcErr)
+	}
+	if !strings.HasPrefix(rpcErr.Message, "enable") {
+		t.Fatalf("message = %q，应以字段名开头", rpcErr.Message)
+	}
+	if fake.installs != 0 {
+		t.Fatal("参数非法时不应调用 Install")
+	}
+}
+
+func TestServiceInstallResultCarriesWarnings(t *testing.T) {
+	server, dir := newTestServer(t, "127.0.0.1:1")
+	seedActiveOwner(t, dir)
+	// 换成可观测的 stderr：warnings 属于用户可见信息，必须随结果返回，
+	// 不再走 s.logf，否则桌面端看不见。
+	var stderr bytes.Buffer
+	server.logger = log.New(&stderr, "ipc: ", 0)
+	warning := "未开启 linger：注销后服务会停止。以该用户执行：loginctl enable-linger <user>"
+	fake := &fakeServiceController{
+		installResult: service.InstallResult{
+			UnitPath: "/tmp/chat-deepseek.service",
+			Enabled:  true,
+			Warnings: []string{warning},
+		},
+	}
+	useFakeService(server, fake)
+
+	value, rpcErr := server.serviceInstall(json.RawMessage(`{"enable":true}`))
+	if rpcErr != nil {
+		t.Fatalf("service.install: %+v", rpcErr)
+	}
+	result := value.(serviceInstallResult)
+	if !result.Enabled {
+		t.Fatal("enabled 应原样透传 InstallResult.Enabled")
+	}
+	if len(result.Warnings) != 1 || result.Warnings[0] != warning {
+		t.Fatalf("warnings = %v，期望原样透传 %q", result.Warnings, warning)
+	}
+	if strings.Contains(stderr.String(), "linger") {
+		t.Fatalf("warnings 不应写 stderr: %q", stderr.String())
+	}
+
+	// 没有 warning 时必须是 []，不能让界面拿到 null。
+	fake.installResult = service.InstallResult{UnitPath: "/tmp/chat-deepseek.service"}
+	value, rpcErr = server.serviceInstall(nil)
+	if rpcErr != nil {
+		t.Fatalf("service.install: %+v", rpcErr)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("编码结果: %v", err)
+	}
+	if !strings.Contains(string(data), `"warnings":[]`) {
+		t.Fatalf("空 warnings 应为 []: %s", data)
+	}
+	if strings.Contains(string(data), `"warnings":null`) {
+		t.Fatalf("warnings 不应是 null: %s", data)
 	}
 }
 

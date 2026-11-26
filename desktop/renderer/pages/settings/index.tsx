@@ -9,8 +9,24 @@ import {
   useTheme,
 } from '../../app'
 import type { HostError, ThemeChoice } from '../../app'
-import type { ConfigProjection } from '../../app/ipc-types'
-import { Button, Card, CardFooter, Dialog, Field, Segmented, StatusPill, Toast } from '../../ui'
+import type {
+  ConfigProjection,
+  ServiceInstallResult,
+  ServiceStartResult,
+  SystemStatus,
+} from '../../app/ipc-types'
+import {
+  Button,
+  Card,
+  CardFooter,
+  Dialog,
+  Field,
+  Segmented,
+  StatusPill,
+  TextButton,
+  Toast,
+  Toggle,
+} from '../../ui'
 import type { SegmentedOption, StatusKind, ToastTone } from '../../ui'
 import styles from './settings.module.css'
 import { validateApiOrigin, validateBackupDir, validateDataDir, validateListen } from './validation'
@@ -34,7 +50,6 @@ interface ToastState {
   message: string
 }
 
-type ServiceTask = 'install' | 'reinstall' | 'uninstall'
 type ConfigField = 'listen' | 'backupDir' | 'apiOrigin' | 'dataDir'
 type Draft = Record<'listen' | 'backupDir' | 'apiOrigin', string>
 type FieldErrors = Partial<Record<ConfigField, string>>
@@ -164,7 +179,17 @@ export function SettingsPage() {
   const [dataDirRestartRequired, setDataDirRestartRequired] = useState(false)
   const [serverErrors, setServerErrors] = useState<FieldErrors>({})
   const [saving, setSaving] = useState(false)
-  const [serviceTask, setServiceTask] = useState<ServiceTask | null>(null)
+  const [uninstallBusy, setUninstallBusy] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
+  /** 打开对话框时的安装/运行态：安装成功后状态会变，文案不能跟着跳成「更新」 */
+  const [installWasInstalled, setInstallWasInstalled] = useState(false)
+  const [installWasRunning, setInstallWasRunning] = useState(false)
+  const [installEnable, setInstallEnable] = useState(true)
+  const [installStart, setInstallStart] = useState(true)
+  const [installBusy, setInstallBusy] = useState(false)
+  const [installWarnings, setInstallWarnings] = useState<string[]>([])
+  const [installError, setInstallError] = useState<string | null>(null)
+  const [lingerCopied, setLingerCopied] = useState(false)
   const [uninstallOpen, setUninstallOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
   /** 滚动条只在翻页时出现，见 settings.module.css 的 .scrolling */
@@ -173,6 +198,8 @@ export function SettingsPage() {
   const writeInFlight = useRef(false)
   /** 滚动停止计时器：连续滚动时不断后推，停稳 800ms 后才淡出 */
   const scrollEndTimer = useRef<number | null>(null)
+  /** 「已复制」1.5s 后恢复按钮文案 */
+  const copyTimerRef = useRef<number | null>(null)
 
   // config.get 回来后才允许编辑：加载中与读取失败时表单保持空值 + 禁用。
   useEffect(() => {
@@ -210,6 +237,9 @@ export function SettingsPage() {
       if (scrollEndTimer.current !== null) {
         window.clearTimeout(scrollEndTimer.current)
       }
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
     }
   }, [])
 
@@ -235,7 +265,7 @@ export function SettingsPage() {
   )
   const patch = baseline === null ? null : changedFields(baseline, draft)
   const dirty = patch !== null || dataDirChanged
-  const busy = saving || serviceTask !== null
+  const busy = saving || uninstallBusy || installBusy
   const formDisabled = !ready || busy || configState.loading
   const dataDirDisabled = formDisabled || !dataDirEditable || dataDirState.loading
   const saveDisabled = !ready || busy || configState.loading || !dirty || hasErrors
@@ -243,6 +273,7 @@ export function SettingsPage() {
   const service = systemStatus?.service
   // 本地运行不需要 unit：状态 pill 只看 TCP 探测结果，不再用 installed 推「未安装」。
   const serviceState = service?.state
+  const serviceRunning = serviceState === 'running'
   const serviceStatus: StatusKind =
     systemStatus === null
       ? 'stopped'
@@ -285,15 +316,24 @@ export function SettingsPage() {
         : serviceInstalled
           ? '由 systemd 用户单元管理'
           : '以桌面端本地进程运行，不需要 systemd；安装单元后由 systemd 管理并支持开机自启'
-  const installTask: ServiceTask = serviceInstalled ? 'reinstall' : 'install'
-  const installLabel =
-    serviceTask === installTask
-      ? serviceInstalled
-        ? '重新安装中…'
-        : '安装中…'
-      : serviceInstalled
-        ? '重新安装'
-        : '安装为系统服务（开机自启）'
+  const installLabel = serviceInstalled ? '重新安装' : '安装为系统服务'
+  // system.status 里没有用户名；拿不到就写 <user>，不猜当前登录账户。
+  const lingerEnabled = service?.linger === true
+  const lingerCommand = lingerEnabled
+    ? 'loginctl disable-linger <user>'
+    : 'loginctl enable-linger <user>'
+  const installPrimaryLabel = installBusy
+    ? installWasInstalled
+      ? '更新中…'
+      : '安装中…'
+    : installWasInstalled
+      ? '更新'
+      : '安装'
+  const installStartLabel =
+    installWasInstalled && installWasRunning ? '更新后重启服务' : '安装后立即启动'
+  // 安装完成且有 warning 时只留「关闭」，防止同一份结果被再点一次重复安装；
+  // 出错时主按钮仍保留，让用户能原地重试。
+  const installFinishedWithWarnings = installWarnings.length > 0 && installError === null
 
   const loadingPlaceholder = configError === null ? '正在读取配置…' : '读取配置失败'
   const dataDirPlaceholder =
@@ -406,37 +446,150 @@ export function SettingsPage() {
     }
   }
 
-  async function handleServiceTask(task: ServiceTask) {
-    if (writeInFlight.current || serviceTask !== null || !serviceReady) {
+  function openInstallDialog() {
+    if (busy || !serviceReady || !serviceSupported) {
       return
     }
-    // 卸载只删 unit，不需要 platform 能力；安装/重装必须有 systemd。
-    if (task !== 'uninstall' && !serviceSupported) {
+    // 每次打开都回到契约默认值：开机自启与安装后启动都默认开
+    setInstallWasInstalled(serviceInstalled)
+    setInstallWasRunning(serviceRunning)
+    setInstallEnable(true)
+    setInstallStart(true)
+    setInstallWarnings([])
+    setInstallError(null)
+    setLingerCopied(false)
+    setInstallOpen(true)
+  }
+
+  function closeInstallDialog() {
+    if (installBusy) {
+      return
+    }
+    setInstallOpen(false)
+  }
+
+  /** file:// 下 navigator.clipboard 可能不可用，失败后回落到 execCommand('copy') */
+  async function writeClipboard(text: string): Promise<boolean> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        return true
+      }
+    } catch {
+      // 权限被拒或不在安全上下文，交给下面的旧路径
+    }
+    try {
+      const field = document.createElement('textarea')
+      field.value = text
+      field.setAttribute('readonly', '')
+      field.style.position = 'fixed'
+      field.style.top = '0'
+      field.style.opacity = '0'
+      document.body.appendChild(field)
+      try {
+        field.select()
+        return document.execCommand('copy')
+      } finally {
+        field.remove()
+      }
+    } catch {
+      return false
+    }
+  }
+
+  async function copyLingerCommand() {
+    const copied = await writeClipboard(lingerCommand)
+    if (!copied) {
+      notify('error', '复制失败，请手动选择命令')
+      return
+    }
+    setLingerCopied(true)
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current)
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      copyTimerRef.current = null
+      setLingerCopied(false)
+    }, 1500)
+  }
+
+  /**
+   * service.start 返回 starting 时端口/单元还没就绪；设置页没有服务页那套轮询，
+   * 这里等一次探测落位再收尾，免得状态卡停在「状态未知」。
+   */
+  async function waitForServiceSettled(): Promise<void> {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 700))
+      try {
+        const next = (await host.request('system.status')) as SystemStatus
+        if (next.service.state === 'running' || next.service.state === 'stopped') {
+          return
+        }
+      } catch {
+        // 读失败交给随后的 reloadStatus 展示错误，安装本身已经成功
+        return
+      }
+    }
+  }
+
+  async function handleInstall() {
+    if (writeInFlight.current || installBusy || !serviceReady || !serviceSupported) {
       return
     }
     writeInFlight.current = true
-    setServiceTask(task)
+    setInstallBusy(true)
+    setInstallError(null)
+    setInstallWarnings([])
     try {
-      if (task === 'uninstall') {
-        await host.request('service.uninstall')
-      } else if (task === 'reinstall') {
-        // 重新安装需要覆盖已有 unit，与 CLI 的 --force 对应
-        await host.request('service.install', { force: true })
-      } else {
-        // 首次安装不带 force，避免把「安装」写成隐式覆盖
-        await host.request('service.install', {})
+      const result = (await host.request('service.install', {
+        force: serviceInstalled,
+        enable: installEnable,
+      })) as ServiceInstallResult
+      const warnings = result.warnings ?? []
+      setInstallWarnings(warnings)
+
+      if (installStart) {
+        // 正在运行时先停再起：安装 unit 后若仍留着本地子进程，service.start 会直接复用
+        // 旧进程而不会切到 systemd；停止后再启动才会走新 unit。
+        if (serviceRunning) {
+          await host.request('service.stop')
+        }
+        const started = (await host.request('service.start')) as ServiceStartResult
+        if (started.state === 'starting') {
+          await waitForServiceSettled()
+        }
       }
+
+      // 有 warning 时对话框留着，让用户看完 linger 说明再手动关闭；成功本身照样给 Toast。
+      notify('success', serviceInstalled ? '服务已更新' : '服务已安装')
+      if (warnings.length === 0) {
+        setInstallOpen(false)
+      }
+    } catch (failure) {
+      setInstallError(serviceFailureText(normalizeHostError(failure)))
+    } finally {
+      reloadStatus()
+      writeInFlight.current = false
+      setInstallBusy(false)
+    }
+  }
+
+  async function handleUninstall() {
+    if (writeInFlight.current || uninstallBusy || !serviceReady) {
+      return
+    }
+    writeInFlight.current = true
+    setUninstallBusy(true)
+    try {
+      await host.request('service.uninstall')
       setUninstallOpen(false)
       reloadStatus()
-      notify(
-        'success',
-        task === 'uninstall' ? '服务已卸载' : task === 'reinstall' ? '服务已重新安装' : '服务已安装'
-      )
+      notify('success', '服务已卸载')
     } catch (failure) {
       notify('error', serviceFailureText(normalizeHostError(failure)))
     } finally {
       writeInFlight.current = false
-      setServiceTask(null)
+      setUninstallBusy(false)
     }
   }
 
@@ -608,9 +761,7 @@ export function SettingsPage() {
                   <>
                     <Button
                       tone="secondary"
-                      onClick={() => {
-                        void handleServiceTask(installTask)
-                      }}
+                      onClick={openInstallDialog}
                       disabled={busy || !serviceSupported || !serviceReady}
                       title={
                         serviceSupported ? undefined : '当前平台没有 systemd，无法安装为系统服务'
@@ -620,7 +771,7 @@ export function SettingsPage() {
                     </Button>
                     {serviceReady && serviceInstalled ? (
                       <Button tone="danger" onClick={() => setUninstallOpen(true)} disabled={busy}>
-                        {serviceTask === 'uninstall' ? '卸载中…' : '卸载服务'}
+                        {uninstallBusy ? '卸载中…' : '卸载服务'}
                       </Button>
                     ) : null}
                   </>
@@ -649,32 +800,147 @@ export function SettingsPage() {
         )}
 
         <Dialog
+          open={installOpen}
+          title={installWasInstalled ? '重新安装系统服务' : '安装系统服务'}
+          onClose={installBusy ? undefined : closeInstallDialog}
+          actions={
+            <>
+              <Button tone="secondary" onClick={closeInstallDialog} disabled={installBusy}>
+                {installFinishedWithWarnings ? '关闭' : '取消'}
+              </Button>
+              {installFinishedWithWarnings ? null : (
+                <Button
+                  onClick={() => {
+                    void handleInstall()
+                  }}
+                  disabled={installBusy}
+                >
+                  {installPrimaryLabel}
+                </Button>
+              )}
+            </>
+          }
+        >
+          <div className={styles.installBody}>
+            <dl className={styles.installMeta}>
+              <div className={styles.installMetaRow}>
+                <dt className={styles.installMetaLabel}>数据目录</dt>
+                <dd className={styles.installMetaValue}>{systemStatus?.dataDir ?? '—'}</dd>
+              </div>
+              <div className={styles.installMetaRow}>
+                <dt className={styles.installMetaLabel}>监听地址</dt>
+                <dd className={styles.installMetaValue}>{service?.listen ?? '—'}</dd>
+              </div>
+            </dl>
+
+            <div className={styles.installOptionRow}>
+              <div className={styles.installOptionText}>
+                <span className={styles.installOptionLabel}>开机自启</span>
+                <span className={styles.installOptionHint}>
+                  {installWasInstalled ? '重新安装会按此设置更新' : '安装后开机自动启动服务'}
+                </span>
+              </div>
+              <Toggle
+                checked={installEnable}
+                onChange={setInstallEnable}
+                label="开机自启"
+                disabled={installBusy || installFinishedWithWarnings}
+                className={styles.installToggle}
+              />
+            </div>
+
+            <div className={styles.installOptionRow}>
+              <div className={styles.installOptionText}>
+                <span className={styles.installOptionLabel}>{installStartLabel}</span>
+                <span className={styles.installOptionHint}>
+                  {installWasInstalled && installWasRunning
+                    ? '先停止再启动，确保新单元生效'
+                    : '安装完成后启动服务'}
+                </span>
+              </div>
+              <Toggle
+                checked={installStart}
+                onChange={setInstallStart}
+                label={installStartLabel}
+                disabled={installBusy || installFinishedWithWarnings}
+                className={styles.installToggle}
+              />
+            </div>
+
+            <div className={styles.lingerBlock}>
+              <div className={styles.lingerHead}>
+                <span className={styles.installOptionLabel}>linger</span>
+                <span className={lingerEnabled ? styles.lingerOn : styles.lingerOff}>
+                  {lingerEnabled ? '已开启（注销后服务继续运行）' : '未开启（注销后服务会停止）'}
+                </span>
+              </div>
+              <div className={styles.lingerCommandRow}>
+                <input
+                  className={styles.lingerCommand}
+                  value={lingerCommand}
+                  readOnly
+                  aria-label="linger 命令"
+                />
+                <TextButton
+                  tone="quiet"
+                  onClick={() => {
+                    void copyLingerCommand()
+                  }}
+                  disabled={installBusy}
+                >
+                  {lingerCopied ? '已复制' : '复制'}
+                </TextButton>
+              </div>
+            </div>
+
+            {installError === null ? null : (
+              <p className={styles.installError} role="alert">
+                {installError}
+              </p>
+            )}
+
+            {installWarnings.length === 0 ? null : (
+              <div className={styles.installWarnings} role="status">
+                <p className={styles.installWarningsTitle}>
+                  {installWasInstalled ? '更新完成，但需要留意' : '安装完成，但需要留意'}
+                </p>
+                <ul className={styles.installWarningList}>
+                  {installWarnings.map((warning, index) => (
+                    <li key={`${index}-${warning}`}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </Dialog>
+
+        <Dialog
           open={uninstallOpen}
           title="卸载服务？"
           description="将停止服务并删除 systemd 用户单元，已有配置与数据不会被删除。"
-          onClose={serviceTask === 'uninstall' ? undefined : () => setUninstallOpen(false)}
+          onClose={uninstallBusy ? undefined : () => setUninstallOpen(false)}
           actions={
             <>
               <Button
                 tone="secondary"
                 onClick={() => setUninstallOpen(false)}
-                disabled={serviceTask === 'uninstall'}
+                disabled={uninstallBusy}
               >
                 取消
               </Button>
               <Button
                 tone="dangerSolid"
                 onClick={() => {
-                  void handleServiceTask('uninstall')
+                  void handleUninstall()
                 }}
-                disabled={serviceTask === 'uninstall'}
+                disabled={uninstallBusy}
               >
-                {serviceTask === 'uninstall' ? '卸载中…' : '卸载服务'}
+                {uninstallBusy ? '卸载中…' : '卸载服务'}
               </Button>
             </>
           }
         >
-          <p className={styles.dialogNote}>卸载后可通过「安装为系统服务（开机自启）」重新安装。</p>
+          <p className={styles.dialogNote}>卸载后可通过「安装为系统服务」重新安装。</p>
         </Dialog>
       </PageBody>
     </>

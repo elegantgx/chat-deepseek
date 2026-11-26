@@ -95,17 +95,18 @@ chat-deepseek ipc [--data-dir <dir>]
 
 探测配置里的监听地址，返回版本、数据目录和服务状态。不需要参数，不读数据库、不写文件。
 
-| 字段                | 类型                                      | 可空 | 说明                                               |
-| ------------------- | ----------------------------------------- | ---- | -------------------------------------------------- |
-| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                 |
-| `dataDir`           | string                                    | 否   | 数据目录绝对路径                                   |
-| `service`           | object                                    | 否   | 服务探测结果                                       |
-| `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                 |
-| `service.listen`    | string                                    | 否   | `config.json` 里的监听地址（未改动）               |
-| `service.source`    | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测                          |
-| `service.installed` | bool                                      | 否   | systemd 用户单元是否已安装；不可用平台恒为 `false` |
-| `service.supported` | bool                                      | 否   | 当前平台是否有可用的 systemd 用户管理器            |
-| `service.mode`      | `"process"` \| `"systemd"` \| `"none"`    | 否   | 谁在管服务，见下                                   |
+| 字段                | 类型                                      | 可空 | 说明                                                 |
+| ------------------- | ----------------------------------------- | ---- | ---------------------------------------------------- |
+| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                   |
+| `dataDir`           | string                                    | 否   | 数据目录绝对路径                                     |
+| `service`           | object                                    | 否   | 服务探测结果                                         |
+| `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                   |
+| `service.listen`    | string                                    | 否   | `config.json` 里的监听地址（未改动）                 |
+| `service.source`    | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测                            |
+| `service.installed` | bool                                      | 否   | systemd 用户单元是否已安装；不可用平台恒为 `false`   |
+| `service.supported` | bool                                      | 否   | 当前平台是否有可用的 systemd 用户管理器              |
+| `service.mode`      | `"process"` \| `"systemd"` \| `"none"`    | 否   | 谁在管服务，见下                                     |
+| `service.linger`    | bool                                      | 否   | 当前用户是否开启 linger；不可用/读取失败恒为 `false` |
 
 `state` 语义：
 
@@ -119,6 +120,10 @@ chat-deepseek ipc [--data-dir <dir>]
 `supported=false` 时只禁用安装入口，本地运行不受影响。安装状态读取失败（权限、`systemctl` 异常）
 不会让 `system.status` 报错：`installed` 保守返回 `false`，`supported` 退回平台能力判断，
 原因只写 stderr。
+
+`linger` 来自 `loginctl show-user <user> -p Linger`，回答「注销后用户级服务还能不能继续跑」。
+平台没有 systemd、或状态读取失败时固定返回 `false`，同样不会让 `system.status` 报错；
+`false` 只说明「未确认开启」，需要提示用户时可参考 `service.install` 返回的 `warnings`。
 
 `mode` 回答「谁在管」，与 `state` 正交，取值固定：
 
@@ -146,7 +151,8 @@ chat-deepseek ipc [--data-dir <dir>]
       "source": "probe",
       "installed": true,
       "supported": true,
-      "mode": "systemd"
+      "mode": "systemd",
+      "linger": false
     }
   }
 }
@@ -761,25 +767,32 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 
 参数（可省略）：
 
-| 字段    | 类型 | 必填 | 说明                                                                             |
-| ------- | ---- | ---- | -------------------------------------------------------------------------------- |
-| `force` | bool | 否   | `true` 覆盖已有 unit（对应 CLI `--force`），用于桌面端「重新安装」；默认 `false` |
+| 字段     | 类型 | 必填 | 说明                                                                                          |
+| -------- | ---- | ---- | --------------------------------------------------------------------------------------------- |
+| `force`  | bool | 否   | `true` 覆盖已有 unit（对应 CLI `--force`），用于桌面端「重新安装」；默认 `false`              |
+| `enable` | bool | 否   | `true` 安装时执行 `systemctl --user enable` 设置开机自启（对应 CLI `--enable`）；默认 `false` |
 
-| 字段       | 类型   | 可空 | 说明                         |
-| ---------- | ------ | ---- | ---------------------------- |
-| `ok`       | bool   | 否   | 成功固定 `true`              |
-| `unitPath` | string | 否   | 实际写入的 unit 文件绝对路径 |
+结果：
 
-- 始终使用 `ScopeUser`；本版不支持 `--system`/`--enable`/`--disable`，`force` 替代 `--force`。
+| 字段       | 类型     | 可空 | 说明                                                      |
+| ---------- | -------- | ---- | --------------------------------------------------------- |
+| `ok`       | bool     | 否   | 成功固定 `true`                                           |
+| `unitPath` | string   | 否   | 实际写入的 unit 文件绝对路径                              |
+| `enabled`  | bool     | 否   | 是否真的执行了 enable；与传参 `enable` 同名但不假设成功   |
+| `warnings` | string[] | 否   | 用户可见提示（例如未开启 linger）；没有时是 `[]`，非 null |
+
+- 始终使用 `ScopeUser`；本版支持 `enable`，不支持 `--system`/`--disable`，`force` 替代 `--force`。
 - `force` 不传、为 `null`（等同省略）或为 `false` 时，unit 已存在返回 `unavailable` 并带 CLI 同款提示；
   `force:true` 时覆盖已有 unit 并重新执行 `daemon-reload`。安装成功也不会自动启动服务，
   需要再调用 `service.start`。
-- `force` 不是布尔值（`null` 除外）返回 `bad_request`，且不会写 unit。
+- `force`、`enable` 不是布尔值（`null` 除外）返回 `bad_request`，message 以字段名开头
+  （例如 `enable 必须是布尔值`），且不会写 unit。
 - 非 Linux、没有运行中的 systemd、找不到 `systemctl`，或数据目录尚未初始化（没有活动 Owner）时返回
   `unavailable`，message 为底层中文原因。
 - 与 `service.start/stop/restart` 共用同一把服务操作信号量；并发时返回
   `{"error":{"code":"unavailable","message":"服务操作正在进行，请稍候"}}`。
-- 安装 warning（例如未开启 linger）只写 stderr，不进入结果字段。
+- 安装 warning（例如未开启 linger）随结果的 `warnings` 返回给界面，不写 stderr；
+  其它真正的错误仍写 stderr。`warnings` 的中文由 `internal/service` 维护，客户端直接展示，不要解析。
 
 成功示例：
 
@@ -787,7 +800,12 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 {
   "jsonrpc": "2.0",
   "id": 9,
-  "result": { "ok": true, "unitPath": "/home/<user>/.config/systemd/user/chat-deepseek.service" }
+  "result": {
+    "ok": true,
+    "unitPath": "/home/<user>/.config/systemd/user/chat-deepseek.service",
+    "enabled": true,
+    "warnings": ["未开启 linger：注销后服务会停止。以该用户执行：loginctl enable-linger <user>"]
+  }
 }
 ```
 
@@ -979,5 +997,6 @@ printf '%s\n' \
 - `config.set` 只支持 `listen`/`backupDir`/`apiOrigin`，不能通过 IPC 设置 `public_url`，也不能清空 `listen`/`apiOrigin`。
 - `config.set`、`service.install`、`service.uninstall` 与 CLI 对应命令一样**不要求登录**；
   能调用 ipc 的操作系统用户即可修改配置或安装/卸载用户级 unit。
-- `service.install` 只安装用户级 unit，不设置开机自启，也不支持 `--system`；默认不覆盖已有 unit
-  （`unavailable`），需要重新安装或更新 unit 时传 `force:true`，或先 `service.uninstall` 再安装。
+- `service.install` 只安装用户级 unit，默认不设置开机自启；需要时传 `enable:true`，或装完后再用
+  `systemctl --user enable`。不支持 `--system`；默认不覆盖已有 unit（`unavailable`），需要重新安装或
+  更新 unit 时传 `force:true`，或先 `service.uninstall` 再安装。

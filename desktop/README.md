@@ -125,7 +125,7 @@ window.host = {
   （类型 `HostErrorPayload`）。不要指望它是 `Error` 实例：`Error` 跨 `contextBridge` 会被重建，
   自定义字段（`code`）会丢，所以这里刻意 reject 普通对象；判断分支只看 `code`，`message` 仅用于展示。
 - `onEvent` 返回取消订阅函数，重复调用安全；`useEffect` 清理时必须调用。
-- `desktop.*`（数据目录读写）是**主进程本地方法**，不转发 Go；契约见「数据目录与本地设置」。
+- `desktop.*`（数据目录读写、打开页面）是**主进程本地方法**，不转发 Go；契约见「数据目录与本地设置」。
 - 纯浏览器里直接开渲染层（没有 preload）时 `window.host` 是 `undefined`，页面要容忍。
 - 类型定义在 `desktop/ipc.d.ts`，`tsconfig.json` 已 include，渲染层可直接用 `window.host`。
 
@@ -212,6 +212,13 @@ await window.host.request('desktop.dataDir.set', { dataDir: '/srv/chat-deepseek/
   `internal`（message 指出具体路径），不会假装保存成功。
 - 保存时用 `path.resolve` 规范化；目标数据目录本次不创建（下次启动由 Go 侧创建），但会预检父目录。
 - 成功写入后主进程打一行：`[desktop] 数据目录已保存为 …，重启应用后生效`。
+
+### 本地方法 `desktop.openUrl`
+
+`desktop.openUrl({ url })` 同样由**主进程本地处理**，用 Electron 的 `shell.openExternal(url)` 交给
+系统默认浏览器。它**只接受 `http:` / `https:`**：参数不是对象、`url` 不是非空字符串、URL 解析失败
+或协议不对都返回 `bad_request`（message 以 `url` 开头）；系统打开失败返回 `internal`。
+成功结果是 `{ ok: true }`。
 
 ## 安全与窗口（固定配置，改之前先对齐）
 

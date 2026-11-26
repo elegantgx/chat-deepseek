@@ -14,14 +14,34 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sp-4);
-  min-width: 240px;
+  gap: var(--sp-12);
+  min-width: 300px;
 }
 
 .statusLine {
   display: flex;
   align-items: center;
   gap: var(--sp-8);
+}
+
+/* 状态卡的操作区：打开页面是次要操作，自动打开开关跟在它后面 */
+.statusActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-16);
+}
+
+.autoOpen {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.autoOpenLabel {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-2);
+  white-space: nowrap;
 }
 
 /* 01 的焦点就是这行大字：8px 圆点 + 22/600，胶囊留给别的场景 */

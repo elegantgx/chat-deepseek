@@ -26,15 +26,20 @@
 方法契约见 `docs/ipc.md`。**不要再写 fixtures**：`../app/mock-host.ts` 就是浏览器里的后端替身，
 它按同一份契约返回数据，所以页面不需要知道自己连的是真后端还是替身。
 
-| 页面 | 方法                                                                                              |
-| ---- | ------------------------------------------------------------------------------------------------- |
-| 服务 | `system.status`、`service.start/stop/restart`、`service.logs` + 事件 `event.service.log`          |
-| 账户 | `auth.whoami`、`auth.login`、`auth.logout`、`account.list/add/password/delete`                    |
-| 备份 | `system.status`、`backup.list/create/restore/delete`                                              |
-| 设置 | `config.get`、`config.set`、`system.status`、`service.install/uninstall`、`desktop.dataDir(.set)` |
+| 页面 | 方法                                                                                                        |
+| ---- | ----------------------------------------------------------------------------------------------------------- |
+| 服务 | `system.status`、`service.start/stop/restart`、`service.logs`、`desktop.openUrl` + 事件 `event.service.log` |
+| 账户 | `auth.whoami`、`auth.login`、`auth.logout`、`account.list/add/password/delete`                              |
+| 备份 | `system.status`、`backup.list/create/restore/delete`                                                        |
+| 设置 | `config.get`、`config.set`、`system.status`、`service.install/uninstall`、`desktop.dataDir(.set)`           |
 
 约定：
 
+- 服务页的「打开页面」由 `system.status.service.listen`（`host:port`）推导，`0.0.0.0` / `::` /
+  `[::]` / 空 host 回落 `127.0.0.1`；`desktop.openUrl` 只接受 http/https。
+- 自动打开只在用户点「启动服务」且进入 `running` 后触发一次；页面加载时服务本来就在跑不自动弹浏览器。
+- 设置页安装对话框的 `service.install({ force, enable })` 结果带 `warnings`，必须留在对话框里展示
+  （例如 linger 未开启），不能只弹 Toast 就关掉；`system.status.service.linger` 决定 linger 文案与命令。
 - 服务页的主操作只看 `system.status.service.state`：`running` → 重启/停止，`stopped` → 启动，
   `unknown` → 禁用。没装 systemd 也能启停（ipc 会托管本地 `serve` 子进程），所以 `installed` /
   `supported` 不参与按钮判断；安装 systemd 用户单元是设置页的高级功能。
@@ -45,7 +50,7 @@
 - 写操作失败统一走 `normalizeHostError`，用 Toast 显示 `message`（`code` 只做分支判断）。
 - 写成功后 `reload()` 相关读请求；真后端里写方法是串行的，且并发顺序不保证，所以一次只允许一个在途操作。
 - 页面不读 `window.location.hash`。替身支持的 `-off` / `empty` / `login` / `statuserr` /
-  `-systemd` 后缀在 `app/mock-host.ts` 里处理；`-uninstalled` 只是默认本地态的显式别名。
+  `-systemd` / `-linger` 后缀在 `app/mock-host.ts` 里处理；`-uninstalled` 只是默认本地态的显式别名。
   页面只管渲染后端给的数据。
 
 ## 视觉验收

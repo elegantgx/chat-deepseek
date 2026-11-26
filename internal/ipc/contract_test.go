@@ -87,13 +87,12 @@ func TestMethodJSONFieldNames(t *testing.T) {
 		t.Fatalf("service.install: %+v", rpcErr)
 	}
 	install := jsonFields(t, value)
-	if _, ok := install["ok"]; !ok {
-		t.Fatalf("service.install 缺少 ok: %v", install)
+	for _, key := range []string{"ok", "unitPath", "enabled", "warnings"} {
+		if _, ok := install[key]; !ok {
+			t.Fatalf("service.install 缺少字段 %q: %v", key, install)
+		}
 	}
-	if _, ok := install["unitPath"]; !ok {
-		t.Fatalf("service.install 缺少 unitPath: %v", install)
-	}
-	if len(install) != 2 {
+	if len(install) != 4 {
 		t.Fatalf("service.install 字段数 = %d: %v", len(install), install)
 	}
 

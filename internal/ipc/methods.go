@@ -60,6 +60,9 @@ type serviceInfo struct {
 	// Mode 回答「谁在管」：ipc 托管的本地子进程（process）、已安装的 systemd 用户单元
 	// （systemd），或两者都没有（none）。它与 State 正交，State 只回答端口通不通。
 	Mode string `json:"mode"`
+	// Linger 是当前用户是否开启了 linger：没开时注销后 systemd 用户服务会停止。
+	// 平台不支持或读取失败时恒为 false，不额外报错。
+	Linger bool `json:"linger"`
 }
 
 type statusResult struct {
@@ -118,12 +121,14 @@ func (s *Server) systemStatus() (any, *rpcError) {
 	status, statusErr := controller.Status(statusCtx)
 	supported := status.Supported
 	installed := status.Installed
+	linger := status.Linger
 	if statusErr != nil {
 		// 状态读取失败不能影响 TCP 探测本身，也不能让 system.status 报错；
-		// 平台能力退回 SupportError 判断，安装状态按「未安装」保守处理，细节写 stderr。
+		// 平台能力退回 SupportError 判断，安装状态与 linger 按 false 保守处理，细节写 stderr。
 		s.logf("读取服务安装状态失败: %v", statusErr)
 		supported = controller.SupportError() == nil
 		installed = false
+		linger = false
 	}
 	return statusResult{
 		Version: s.version,
@@ -135,6 +140,7 @@ func (s *Server) systemStatus() (any, *rpcError) {
 			Installed: installed,
 			Supported: supported,
 			Mode:      s.serviceMode(installed),
+			Linger:    linger,
 		},
 	}, nil
 }

@@ -303,6 +303,52 @@ func TestServiceModeProjection(t *testing.T) {
 	}
 }
 
+func TestSystemStatusLingerProjection(t *testing.T) {
+	cases := []struct {
+		name      string
+		status    service.Status
+		statusErr error
+		want      bool
+	}{
+		{
+			name:   "enabled",
+			status: service.Status{Supported: true, Installed: true, Linger: true},
+			want:   true,
+		},
+		{
+			name:   "disabled",
+			status: service.Status{Supported: true, Installed: true},
+			want:   false,
+		},
+		{
+			name:      "read error",
+			status:    service.Status{Supported: true, Installed: true, Linger: true},
+			statusErr: errors.New("loginctl 不可用"),
+			want:      false,
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server, _ := newTestServer(t, "127.0.0.1:1")
+			fake := &fakeServiceController{status: testCase.status, statusErr: testCase.statusErr}
+			server.newService = func() serviceController { return fake }
+
+			value, rpcErr := server.systemStatus()
+			if rpcErr != nil {
+				t.Fatalf("system.status: %+v", rpcErr)
+			}
+			info := value.(statusResult).Service
+			if info.Linger != testCase.want {
+				t.Fatalf("linger = %v，期望 %v", info.Linger, testCase.want)
+			}
+			fields := jsonFields(t, info)
+			if _, ok := fields["linger"]; !ok {
+				t.Fatalf("service 字段缺少 linger: %v", fields)
+			}
+		})
+	}
+}
+
 func TestServiceStartDoesNotSpawnWhenPortBusy(t *testing.T) {
 	listener := liveListener(t)
 	server, _ := newTestServer(t, listener.Addr().String())

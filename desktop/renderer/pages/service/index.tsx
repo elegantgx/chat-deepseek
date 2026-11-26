@@ -25,9 +25,11 @@ import {
   PowerIcon,
   RefreshIcon,
   Toast,
+  Toggle,
 } from '../../ui'
 import type { LogLine } from '../../ui'
 import { clockTime, parseLogLine } from './logs'
+import { servicePageUrl } from './url'
 import styles from './service.module.css'
 
 type ServiceAction = 'start' | 'stop' | 'restart'
@@ -85,6 +87,10 @@ export function ServicePage() {
   const [lines, setLines] = useState<LogLine[]>([])
   const [busy, setBusy] = useState<ServiceBusy | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  /** 启动后是否自动打开页面：组件内存状态，刷新页面回到默认开 */
+  const [autoOpen, setAutoOpen] = useState(true)
+  /** 只有用户点「启动服务」成功后才置位；页面加载时已在运行不会触发 */
+  const autoOpenPendingRef = useRef(false)
   /** starting 是本地进行中态：契约里 system.status 只给 running/stopped/unknown */
   const [starting, setStarting] = useState(false)
   /** 轮询拿到的最新快照；在 hook 的 reload 完成前顶替旧 data */
@@ -171,12 +177,17 @@ export function ServicePage() {
         }
         setLiveStatus(next)
         if (next.service.state === 'running' || next.service.state === 'stopped') {
+          // 停在 stopped 或超时都没有可打开的页面，清掉这次自动打开意图
+          if (next.service.state === 'stopped') {
+            autoOpenPendingRef.current = false
+          }
           finish()
           reloadLogs()
           return
         }
         if (Date.now() - startedAt >= START_POLL_TIMEOUT_MS) {
           // 超时也退出轮询并恢复按钮；最后一次快照仍是有效状态
+          autoOpenPendingRef.current = false
           finish()
           return
         }
@@ -189,6 +200,7 @@ export function ServicePage() {
           return
         }
         // 轮询失败要落到状态卡错误分支，不能一直停在「启动中」
+        autoOpenPendingRef.current = false
         setPollError(normalizeHostError(failure))
         setStarting(false)
         // 顺手刷新 hook：重试期间 status.error 会一直保留，避免闪回旧 data
@@ -283,6 +295,35 @@ export function ServicePage() {
     }, TOAST_MS)
   }, [])
 
+  /** 打开页面统一走主进程的 desktop.openUrl：渲染层拿不到 shell，也不能自己开窗口 */
+  const openPage = useCallback(
+    async (url: string) => {
+      try {
+        await host.request('desktop.openUrl', { url })
+      } catch (failure) {
+        notifyFailure(normalizeHostError(failure))
+      }
+    },
+    [host, notifyFailure]
+  )
+
+  // 自动打开只跟「用户刚点过启动」绑定：页面加载时服务本来就在跑也不弹浏览器，
+  // 否则桌面端每次启动都要抢一次系统焦点。开关只影响自动行为，手动按钮始终可用。
+  useEffect(() => {
+    if (!autoOpenPendingRef.current || !running) {
+      return
+    }
+    // 这一次启动只兑现一次：如果此刻开关是关的，之后再把开关打开也不补弹
+    autoOpenPendingRef.current = false
+    if (!autoOpen) {
+      return
+    }
+    const url = servicePageUrl(service?.listen)
+    if (url !== null) {
+      void openPage(url)
+    }
+  }, [autoOpen, openPage, running, service?.listen])
+
   /** 写操作一次一个：成功刷新状态与日志快照，失败完整交给 Toast，不吞错误 */
   const run = async (action: ServiceAction) => {
     if (busy !== null || starting || !ready) {
@@ -293,8 +334,14 @@ export function ServicePage() {
     }
     setBusy(action)
     setPollError(null)
+    // 重新发起任何操作都先取消上一次没兑现的自动打开
+    autoOpenPendingRef.current = false
     try {
       const result = (await host.request(`service.${action}`)) as ServiceStartResult
+      // 只有用户点「启动服务」且请求成功，才允许在进入 running 后自动开页面
+      if (action === 'start') {
+        autoOpenPendingRef.current = true
+      }
       if (action !== 'stop' && result.state === 'starting') {
         // 后端只保证 systemctl 已返回；先进入本地启动中，由轮询 effect 继续探测
         setStarting(true)
@@ -323,6 +370,7 @@ export function ServicePage() {
 
   /** 错误时不拿旧 data 填充右侧元信息，避免看起来像刚刚探测过 */
   const meta = readError === null ? displayStatus : null
+  const pageUrl = servicePageUrl(service?.listen)
   const actionDisabled = busy !== null || starting || !ready
   // 快照一行都没有说明没有日志来源（从未启动过，平台也没有 journal）：
   // 点「查看全部」只会再取一次空数组，收口链接没有意义。
@@ -395,6 +443,31 @@ export function ServicePage() {
                   aria-hidden="true"
                 />
                 <span className={styles.statusWord}>{statusLabel}</span>
+              </div>
+              <div className={styles.statusActions}>
+                <Button
+                  tone="secondary"
+                  disabled={!running || pageUrl === null}
+                  title={
+                    running
+                      ? pageUrl === null
+                        ? '监听地址无法推导出可打开的页面'
+                        : undefined
+                      : '服务运行后才能打开页面'
+                  }
+                  onClick={() => {
+                    if (pageUrl !== null) {
+                      void openPage(pageUrl)
+                    }
+                  }}
+                >
+                  打开页面
+                </Button>
+                {/* 手动打开不受开关影响；开关只决定点「启动服务」成功后是否自动打开 */}
+                <div className={styles.autoOpen}>
+                  <Toggle checked={autoOpen} onChange={setAutoOpen} label="启动后打开页面" />
+                  <span className={styles.autoOpenLabel}>启动后打开页面</span>
+                </div>
               </div>
             </div>
           )}

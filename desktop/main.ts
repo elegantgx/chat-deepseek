@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { BrowserWindow, Menu, app, ipcMain, nativeTheme } from 'electron'
+import { BrowserWindow, Menu, app, ipcMain, nativeTheme, shell } from 'electron'
 import type { HostErrorPayload, HostReply } from './ipc'
 
 // 主进程的 console 就是排障通道（stderr 转发、后端退出、冒烟标记都靠它）
@@ -371,9 +371,13 @@ function registerIpc(): void {
       }
       // desktop.* 是主进程自己的设置，先于 backend 判空处理：否则后端没起来时设置页连
       // 「当前数据目录」都读不到，而这正是排障最需要的信息。它们不转发 Go、不走 /api/v1。
-      if (method === 'desktop.dataDir' || method === 'desktop.dataDir.set') {
+      if (
+        method === 'desktop.dataDir' ||
+        method === 'desktop.dataDir.set' ||
+        method === 'desktop.openUrl'
+      ) {
         try {
-          return { ok: true, result: handleDesktopMethod(method, params) }
+          return { ok: true, result: await handleDesktopMethod(method, params) }
         } catch (error) {
           return { ok: false, error: toHostError(error) }
         }
@@ -457,6 +461,16 @@ function createWindow(): void {
         .then(
           (text: unknown) => console.log('[smoke] desktop.dataDir', String(text)),
           (error: unknown) => console.log('[smoke] desktop.dataDir failed', String(error))
+        )
+      // desktop.openUrl 只验拒绝分支：正常 URL 会真的拉起浏览器，冒烟不能干扰桌面。
+      // file:// 必须被挡在 bad_request，否则这个本地方法就能变成任意本地打开。
+      void win.webContents
+        .executeJavaScript(
+          "window.host.request('desktop.openUrl', { url: 'file:///etc/passwd' }).then((r) => JSON.stringify(r), (e) => 'ERR:' + e.code)"
+        )
+        .then(
+          (text: unknown) => console.log('[smoke] desktop.openUrl file:// ->', String(text)),
+          (error: unknown) => console.log('[smoke] desktop.openUrl failed', String(error))
         )
       setTimeout(() => app.quit(), 800)
     })
@@ -703,8 +717,54 @@ function setDataDir(params: unknown): DataDirState {
   return dataDirState(target)
 }
 
-/** 两个本地方法的入口；registerIpc 已按 method 白名单筛过，这里不再判断其它值 */
-function handleDesktopMethod(method: string, params: unknown): DataDirState {
+/** 校验 desktop.openUrl 的 params；不合法就抛 HostErrorPayload，message 以 url 开头 */
+function readOpenUrlInput(params: unknown): string {
+  const value =
+    typeof params === 'object' && params !== null && !Array.isArray(params)
+      ? (params as { url?: unknown }).url
+      : undefined
+  if (typeof value !== 'string' || value.trim() === '') {
+    const failure: HostErrorPayload = { code: 'bad_request', message: 'url 必须是非空字符串' }
+    throw failure
+  }
+  let parsed: URL
+  try {
+    parsed = new URL(value.trim())
+  } catch {
+    const failure: HostErrorPayload = { code: 'bad_request', message: 'url 不是合法的 URL' }
+    throw failure
+  }
+  // 只放行网页：file:// / javascript: 之类不交给系统默认处理，避免变成任意本地打开。
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const failure: HostErrorPayload = { code: 'bad_request', message: 'url 只接受 http/https 地址' }
+    throw failure
+  }
+  return parsed.href
+}
+
+/** desktop.openUrl 的响应；打开失败属于系统层错误，不是用户输入问题 */
+async function openExternalUrl(params: unknown): Promise<{ ok: true }> {
+  const url = readOpenUrlInput(params)
+  try {
+    await shell.openExternal(url)
+    return { ok: true }
+  } catch (error) {
+    const failure: HostErrorPayload = {
+      code: 'internal',
+      message: `打开页面失败：${String(error)}`,
+    }
+    throw failure
+  }
+}
+
+/** 本地方法的入口；registerIpc 已按 method 白名单筛过，这里不再判断其它值 */
+async function handleDesktopMethod(
+  method: string,
+  params: unknown
+): Promise<DataDirState | { ok: true }> {
+  if (method === 'desktop.openUrl') {
+    return openExternalUrl(params)
+  }
   if (method === 'desktop.dataDir.set') {
     return setDataDir(params)
   }
