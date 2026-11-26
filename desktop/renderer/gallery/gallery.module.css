@@ -1,0 +1,456 @@
+/* ==========================================================================
+   组件总览页：页面脚手架样式，组件本身在 desktop/renderer/ui 下。
+   画布按 1280×800 设计，窗口更大时板面铺满、不拉伸内部栅格。
+   ========================================================================== */
+
+.root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.material {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--material);
+}
+
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--noise-url);
+  background-size: 120px 120px;
+  opacity: var(--noise-opacity);
+}
+
+.window {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* ==========================================================================
+   板面：组件视图直接放在材质底上（玻璃样本才有意义）
+   ========================================================================== */
+
+.board {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 20px var(--page-x) 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.board::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.boardFlush {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.boardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+}
+
+.boardTitle {
+  margin: 0;
+  font-size: var(--fs-22);
+  line-height: var(--lh-22);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.015em;
+}
+
+.boardLinks {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.boardLink {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-2);
+}
+
+.boardAction {
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-6);
+  background: none;
+  font-family: var(--font-ui);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.boardAction:hover {
+  color: var(--text);
+}
+
+.boardAction:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.boardActionOn {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+.boardDivider {
+  width: 1px;
+  height: 12px;
+  background: var(--line-strong);
+}
+
+.themeLinks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   规格卡
+   ========================================================================== */
+
+.specGrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 0;
+}
+
+.specCard {
+  padding: 8px 12px 9px;
+  min-width: 0;
+  background: var(--card);
+  border-radius: var(--r-12);
+  box-shadow: var(--shadow-2);
+}
+
+.span3 {
+  grid-column: span 3;
+}
+
+.span4 {
+  grid-column: span 4;
+}
+
+.span6 {
+  grid-column: span 6;
+}
+
+.specHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.specTitle {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-semibold);
+}
+
+.specNote {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}
+
+.specStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.specItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.specCap {
+  /* 原稿用的是 <p>，浏览器默认 1em 下边距实际上参与了卡片高度；这里显式写出来 */
+  margin: 6px 0 11px;
+  font-size: var(--fs-11);
+  line-height: 16px;
+  color: var(--text-3);
+}
+
+.specCapInline {
+  margin: 0;
+  font-size: var(--fs-11);
+  line-height: 16px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.specCapCenter {
+  margin: 6px 0 11px;
+  font-size: var(--fs-11);
+  line-height: 16px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.fixedButton {
+  width: 104px;
+}
+
+.inputGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.badgeRow {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 卡片样本 ---------- */
+
+.accountRows {
+  display: flex;
+  flex-direction: column;
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 20px;
+  border-top: 1px solid var(--line);
+}
+
+.accountRow:first-child {
+  border-top: 0;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: var(--fs-11);
+  line-height: 1;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+}
+
+.avatarSm {
+  width: 24px;
+  height: 24px;
+}
+
+.accountMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.accountName {
+  font-size: var(--fs-13);
+  line-height: 18px;
+  font-weight: var(--fw-medium);
+}
+
+.accountSub {
+  font-size: var(--fs-11);
+  line-height: 15px;
+  color: var(--text-3);
+}
+
+.footLink {
+  margin-left: auto;
+}
+
+/* ---------- 表格样本 ---------- */
+
+.tableWrap {
+  background: var(--card);
+  border-radius: var(--r-10);
+  overflow: hidden;
+}
+
+/* ---------- 侧栏选中态样本 ---------- */
+
+.navSpec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: var(--r-10);
+  background: var(--panel);
+}
+
+:global(html[data-theme='dark']) .navSpec {
+  background: var(--hover);
+}
+
+.hoverSlot {
+  border-radius: var(--r-10);
+  background: var(--nav-hover);
+}
+
+/* ---------- 对话框样本 ---------- */
+
+.floatDemo {
+  position: relative;
+  height: 132px;
+  border-radius: var(--r-10);
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.floatBg {
+  position: absolute;
+  inset: 0;
+  padding: 10px 14px;
+}
+
+.miniListRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 30px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-11);
+  color: var(--text);
+}
+
+.miniListRow > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   侧栏底部（Sidebar 的 footer 内容）
+   ========================================================================== */
+
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+}
+
+.dotOk {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.version {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+  padding-left: 13px;
+}
+
+/* ==========================================================================
+   纸面视图：Paper 直接贴住窗口左边，内部是页面头 + 白卡 + 日志
+   ========================================================================== */
+
+.densityPaper {
+  height: 100%;
+  width: 100%;
+}
+
+.pageHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: var(--head-top) var(--page-x) 16px;
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: var(--fs-22);
+  line-height: var(--lh-22);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.015em;
+}
+
+.pageActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageBody {
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--page-x) 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.cellUser {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: var(--fw-medium);
+}
+
+.created {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}

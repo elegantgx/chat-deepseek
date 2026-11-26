@@ -1,0 +1,173 @@
+/* ==========================================================================
+   侧栏：唯一的常驻玻璃层。
+   外 1px 用真实边框（inset 阴影在 backdrop-filter 元素上会被吃掉），
+   内 1px 用 inset；顶部 1px 边缘线单独用 ::before 画。
+   ========================================================================== */
+
+.sidebar {
+  position: relative;
+  z-index: 2;
+  width: var(--sidebar-w);
+  height: 100%;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px 14px;
+  background-color: var(--glass-tint);
+  background-image: var(--glass-sheen);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  border-left: 1px solid var(--glass-rim);
+  border-right: 1px solid var(--glass-rim);
+  box-shadow:
+    inset 1px 0 0 var(--glass-rim-in),
+    inset -1px 0 0 var(--glass-rim-in),
+    var(--glass-edge-shadow);
+}
+
+/* 顶部 1px 边缘线：浅色压暗、深色提亮，ΔL 对齐 */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: var(--glass-top);
+  z-index: 0;
+}
+
+/* 玻璃表面的一层细颗粒（alpha 已烘进 SVG，不用混合模式） */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: 2px; /* 让开 1px 边缘线，避免颗粒把边线冲淡 */
+  pointer-events: none;
+  background-image: var(--noise-url);
+  background-size: 120px 120px;
+  z-index: 0;
+}
+
+.sidebar > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- 品牌 ---------- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+  margin: 2px 0 20px;
+}
+
+.brandMark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--r-8);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--gloss-strong);
+  display: grid;
+  place-items: center;
+  color: var(--accent-ink);
+}
+
+.brandMark svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.5;
+}
+
+.brandName {
+  display: block;
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.brandSub {
+  display: block;
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-2);
+  margin-top: 1px;
+}
+
+/* ---------- 导航 ---------- */
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-10);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--fw-medium);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.item svg {
+  width: 19px;
+  height: 19px;
+  flex: none;
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+
+.item:hover:not(:disabled):not(.active) {
+  background: var(--nav-hover);
+}
+
+/* 定稿 V2：淡灰填充 + 图标强调色，文字保持中性，无描边 */
+.active {
+  background: var(--nav-sel-bg);
+  color: var(--nav-sel-fg);
+  font-weight: var(--fw-semibold);
+}
+
+.active svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.item:disabled {
+  color: var(--text-disabled);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* ---------- 侧栏底部 ---------- */
+
+.footer {
+  margin-top: auto;
+  padding: 12px 8px 0;
+  border-top: 1px solid var(--panel-top);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}

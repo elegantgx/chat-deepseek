@@ -1,0 +1,56 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.head {
+  height: 34px;
+  padding: 0 20px;
+  text-align: left;
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.cell {
+  height: 44px;
+  padding: 0 20px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  vertical-align: middle;
+}
+
+.table tbody tr:first-child td {
+  border-top: 0;
+}
+
+.right {
+  text-align: right;
+}
+
+.actionsHead {
+  padding: 0 20px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.actionsCell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cellActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.emptyCell {
+  padding: 8px 20px;
+  border-top: 0;
+}

@@ -1,0 +1,48 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 12px; /* 同上，实际渲染为半高圆角 */
+  font-size: var(--fs-11);
+  line-height: 1;
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.running {
+  background: var(--success-soft);
+  color: var(--success-ink);
+}
+
+.running .dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.stopped {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.stopped .dot {
+  background: var(--text-3);
+}
+
+.error {
+  background: var(--danger-soft);
+  color: var(--danger-ink);
+}
+
+.error .dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}

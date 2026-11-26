@@ -26,7 +26,11 @@ const config: Configuration = {
   mode: dev ? 'development' : 'production',
   // 渲染层是标准 Web 页面：Electron 里由 file:// 加载，不碰 Node 能力
   target: 'web',
-  entry: path.resolve(desktopRoot, 'renderer/main.tsx'),
+  entry: {
+    // 原入口保持不变，只把它命名为 main，便于和 gallery 分开注入 HTML
+    main: path.resolve(desktopRoot, 'renderer/main.tsx'),
+    gallery: path.resolve(desktopRoot, 'renderer/gallery/main.tsx'),
+  },
   output: {
     path: path.resolve(desktopRoot, 'dist/renderer'),
     // file:// 下按脚本自身位置推导资源地址
@@ -72,6 +76,14 @@ const config: Configuration = {
       template: path.resolve(desktopRoot, 'renderer/index.html'),
       // file:// 下 classic 脚本会因协议受限，defer 脚本按相对路径加载才正常
       scriptLoading: 'defer',
+      chunks: ['main'],
+    }),
+    // 组件总览：独立 HTML，不把 gallery 代码带进产品窗口
+    new rspack.HtmlRspackPlugin({
+      template: path.resolve(desktopRoot, 'renderer/gallery/index.html'),
+      filename: 'gallery.html',
+      scriptLoading: 'defer',
+      chunks: ['gallery'],
     }),
   ],
   performance: { hints: false },

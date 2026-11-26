@@ -1,0 +1,57 @@
+.textButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: var(--r-6);
+  background: none;
+  font-family: var(--font-ui);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.textButton svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  stroke-width: 1.5;
+}
+
+.textButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.accent {
+  color: var(--accent-ink);
+}
+
+.accent:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.quiet {
+  color: var(--text-2);
+}
+
+.quiet:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.danger {
+  color: var(--danger-ink);
+}
+
+.danger:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.textButton:disabled {
+  color: var(--text-disabled);
+  text-decoration: none;
+  cursor: not-allowed;
+}

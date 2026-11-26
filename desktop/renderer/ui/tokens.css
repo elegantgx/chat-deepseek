@@ -1,0 +1,212 @@
+/* ==========================================================================
+   chat-deepseek 桌面管理端 · 设计 token（第三轮：去色彩）
+   结构：中性材质底 → 玻璃侧栏 → 浮起的纸面板
+   原则：高级感来自秩序与精度，不来自颜色。除强调色/语义色外没有任何彩色。
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- 字体 ---------- */
+  --font-ui: system-ui, 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-22: 22px;
+
+  --lh-11: 16px;
+  --lh-12: 18px;
+  --lh-13: 20px;
+  --lh-15: 22px;
+  --lh-17: 24px;
+  --lh-22: 28px;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* ---------- 圆角（只允许这五档） ---------- */
+  --r-6: 6px;
+  --r-8: 8px;
+  --r-10: 10px;
+  --r-12: 12px;
+  --r-14: 14px;
+
+  /* ---------- 间距 ---------- */
+  --sp-4: 4px;
+  --sp-6: 6px;
+  --sp-8: 8px;
+  --sp-10: 10px;
+  --sp-12: 12px;
+  --sp-14: 14px;
+  --sp-16: 16px;
+  --sp-20: 20px;
+  --sp-24: 24px;
+  --sp-28: 28px;
+  --sp-32: 32px;
+
+  /* ---------- 外壳尺寸 ---------- */
+  --sidebar-w: 240px;
+  --page-x: 32px;
+  --head-top: 28px;
+  --window-w: 1280px;
+  --window-h: 800px;
+
+  /* ---------- 纸面板（#FBFBFD） ---------- */
+  --panel: #fbfbfd;
+  --panel-outline: rgba(0, 0, 0, 0.075);
+  --panel-top: rgba(0, 0, 0, 0.057);
+
+  /* ---------- 内容层 ---------- */
+  --card: #ffffff;
+  --sunken: #f5f5f7;
+  --log-bg: #ececef;
+  --log-fg: #5c5c63;
+  --log-dim: #64646b;
+  --hover: #f2f2f4;
+  --text: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #8a8a90;
+  --text-disabled: #a6a6ad;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.14);
+  --field-ring: rgba(0, 0, 0, 0.08);
+  --btn-ring: rgba(0, 0, 0, 0.09);
+  --switch-off: #d9d9de;
+  --seg-track: #efeff1;
+  --seg-thumb: #ffffff;
+  --seg-thumb-ring: rgba(0, 0, 0, 0.04);
+
+  /* ---------- 组件层补充（值全部取自 app.css，不新增视觉决策） ---------- */
+  --on-accent: #ffffff; /* 实心按钮上的文字 / 开关滑钮 */
+  --knob: #ffffff;
+  --gloss: rgba(255, 255, 255, 0.22); /* 实心按钮顶部高光 */
+  --gloss-strong: rgba(255, 255, 255, 0.45); /* 品牌标内圈高光 */
+  --accent-shadow: rgba(10, 132, 255, 0.24); /* 主按钮落影 */
+  --nav-hover: rgba(0, 0, 0, 0.05); /* 原稿写死在 .nav-item.is-hover */
+  --scrim: rgba(0, 0, 0, 0.16); /* 对话框遮罩（app.css .scrim） */
+
+  /* ---------- 强调色 / 语义色（全图仅有的彩色） ---------- */
+  --accent: #0a84ff;
+  --accent-ink: #0b62c4;
+  --accent-soft: rgba(10, 132, 255, 0.12);
+  --success: #30d158;
+  --success-ink: #1b7f3a;
+  --success-soft: rgba(48, 209, 88, 0.14);
+  --warning: #ff9f0a;
+  --warning-ink: #8a5800;
+  --warning-soft: rgba(255, 159, 10, 0.14);
+  --danger: #ff453a;
+  --danger-ink: #c42b1c;
+  --danger-soft: rgba(255, 69, 58, 0.1);
+  --danger-ring: rgba(255, 69, 58, 0.36);
+  --focus-ring: rgba(10, 132, 255, 0.25);
+
+  /* ---------- 阴影 ---------- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.03);
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+
+  /* ---------- 玻璃（仅导航层：白 26% 叠在中性底上 ≈ #F5F5F7） ---------- */
+  --glass-tint: rgba(255, 255, 255, 0.26);
+  --glass-blur: 30px;
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 58%);
+  /* 边缘线索：浅色一律用「压暗」，与深色「提亮」的 ΔL 对齐（见 09-theme-parity） */
+  --glass-top: rgba(0, 0, 0, 0.085); /* 顶部 1px（压暗，与深色 ΔL 对齐） */
+  --glass-rim: rgba(0, 0, 0, 0.072); /* 外 1px 暗 */
+  --glass-rim-in: rgba(255, 255, 255, 0.9); /* 内 1px 亮 */
+  --glass-edge-shadow: 8px 0 24px -16px rgba(0, 0, 0, 0.045);
+
+  /* ---------- 侧栏选中态：V2 淡灰（V1/V3 见 08 自检图） ---------- */
+  --nav-sel-bg: rgba(0, 0, 0, 0.06);
+  --nav-sel-fg: #1d1d1f;
+
+  /* ---------- 中性噪声（内联 SVG，非外链） ---------- */
+  /* feTurbulence 只取 R 通道转灰、alpha 拉满：均值锁在 50%，叠上去不会把底压暗 */
+  /* 噪声：RGB 只取 turbulence 的 R 通道，alpha 固定为 5%（不用 mix-blend-mode，
+     避免落在 backdrop-root 上把整块玻璃压暗） */
+  --noise-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0.3 0 0 0 0.7 0.3 0 0 0 0.7 0.3 0 0 0 0.7 0 0 0 0 0.18'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  --noise-opacity: 1;
+  --noise-opacity: 0; /* 定稿关闭整窗噪声：上一行被覆盖，保留以示过程 */
+
+  /* ---------- 材质底：中性灰，只留 1–2% 冷灰倾向（#F1F1F3 → #EFEFF1） ---------- */
+  --material: linear-gradient(180deg, #f1f1f3 0%, #efeff1 100%);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --panel: #1c1c1e;
+  --panel-outline: rgba(255, 255, 255, 0.07);
+  --panel-top: rgba(255, 255, 255, 0.046);
+
+  --card: #2c2c2e;
+  --sunken: #232325;
+  --log-bg: #131315;
+  --log-fg: #98989d;
+  --log-dim: #95959b;
+  --hover: #323234;
+  --text: #f5f5f7;
+  --text-2: #98989d;
+  --text-3: #8e8e93;
+  --text-disabled: #6c6c72;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --field-ring: rgba(255, 255, 255, 0.1);
+  --btn-ring: rgba(255, 255, 255, 0.16);
+  --switch-off: #3a3a3e;
+  --seg-track: #232325;
+  --seg-thumb: #48484c;
+  --seg-thumb-ring: transparent;
+
+  --on-accent: #ffffff;
+  --knob: #ffffff;
+  --gloss: rgba(255, 255, 255, 0.22);
+  --gloss-strong: rgba(255, 255, 255, 0.45);
+  --accent-shadow: rgba(10, 132, 255, 0.24);
+  --nav-hover: rgba(255, 255, 255, 0.07);
+  --scrim: rgba(0, 0, 0, 0.35);
+
+  --accent: #409cff;
+  --accent-ink: #79baff;
+  --accent-soft: rgba(64, 156, 255, 0.2);
+  --success: #30d158;
+  --success-ink: #4cd964;
+  --success-soft: rgba(48, 209, 88, 0.16);
+  --warning: #ff9f0a;
+  --warning-ink: #ffb340;
+  --warning-soft: rgba(255, 159, 10, 0.15);
+  --danger: #ff453a;
+  --danger-ink: #ff6b61;
+  --danger-soft: rgba(255, 69, 58, 0.16);
+  --danger-ring: rgba(255, 69, 58, 0.42);
+  --focus-ring: rgba(64, 156, 255, 0.32);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.32);
+  --shadow-card: none;
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+
+  /* 深色玻璃：白 4% 叠在 #161618 上 ≈ #1E1E20 */
+  --glass-tint: rgba(255, 255, 255, 0.04);
+  --glass-blur: 30px;
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 58%);
+  --glass-top: rgba(255, 255, 255, 0.034); /* 顶部 1px（提亮，与浅色 ΔL 对齐） */
+  --glass-rim: rgba(255, 255, 255, 0.046); /* 外 1px 亮 */
+  --glass-rim-in: rgba(0, 0, 0, 0.27); /* 内 1px 暗 */
+  --glass-edge-shadow: 8px 0 24px -16px rgba(0, 0, 0, 0.13);
+
+  --nav-sel-bg: rgba(255, 255, 255, 0.08);
+  --nav-sel-fg: #f5f5f7;
+
+  /* 深色专用噪声：均值贴着 #161618，不会把侧栏提亮 */
+  --noise-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0.25 0 0 0 0.02 0.25 0 0 0 0.02 0.25 0 0 0 0.02 0 0 0 0 0.35'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  --material: linear-gradient(180deg, #171719 0%, #151517 100%);
+}
