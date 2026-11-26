@@ -17,7 +17,7 @@
 ## 2. 当前状态（2026-11-26 核验）
 
 - 改造状态：v1 主链路可用。Go 服务端具备账户/组、登录/CSRF、设置与 API Key 加密、会话版本锁/永久删除、附件存储、DeepSeek Files/SSE/ASR/TTS 代理和 Web UI 嵌入；前端已登录门、设置、会话、附件全部走 `/api/v1`，localStorage/IndexedDB 已移除。
-- Git：当前在 `feature/dev`；`main` 跟踪 `upstream/main`，`feature/dev` 跟踪 `origin/feature/dev`；`AGENTS.md` 提交在 feature 分支。已合并上游 `v0.1.4`（合并提交 `7e88ec5`）。
+- Git：`main` 跟踪 `upstream/main`，`feature/dev` 跟踪 `origin/feature/dev`；GUI 大重构在 `refactor/gui-core`（从 `feature/dev` 切出，完成后合并回 `feature/dev`）。已合并上游 `v0.1.4`（合并提交 `7e88ec5`）。
 - `pnpm type`：通过。
 - `pnpm lint`：通过，`0 warnings and 0 errors`（约 132 个文件）。
 - `pnpm build`：通过，生成 `dist/` 并复制到 `internal/webui/dist/` 供 `go:embed`。
