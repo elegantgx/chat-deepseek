@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
+import gui_config
 import parsing
 import theme
 from cdgui.domain import reducers
@@ -137,6 +138,14 @@ class FakeController:
     @property
     def state(self) -> AppState:
         return self._state
+
+    @property
+    def config(self) -> gui_config.Config:
+        return gui_config.Config()
+
+    @property
+    def service_user(self) -> str:
+        return "gx"
 
     def set_state(self, state: AppState, *, notify: bool = True) -> None:
         self._state = state

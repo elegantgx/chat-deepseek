@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Protocol, runtime_checkable
 
+import gui_config
+
 from ..domain.state import AppState, PageId
 from ..domain.target import Endpoint
 
@@ -34,6 +36,14 @@ class ControllerProtocol(Protocol):
     @property
     def pump(self) -> PumpProtocol:
         """主线程回投队列；窗口定时 drain。"""
+
+    @property
+    def config(self) -> gui_config.Config:
+        """当前 config.gui.json 的内存快照；设置页只读。"""
+
+    @property
+    def service_user(self) -> str:
+        """当前目标用于 systemd/linger 的用户名；服务页只读。"""
 
     def subscribe(self, listener: Callable[[AppState], None]) -> Callable[[], None]:
         """订阅状态变化，返回取消订阅函数。"""
