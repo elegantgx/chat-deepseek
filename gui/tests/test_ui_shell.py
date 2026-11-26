@@ -44,6 +44,7 @@ from cdgui.ui.primitives import Button
 from cdgui.ui.protocols import ControllerProtocol
 from cdgui.ui.views import (
     COMPACT_BREAKPOINT,
+    IdentityChip,
     NAV_ROW_HEIGHT,
     NAV_WIDTH,
     STATUS_BAR_HEIGHT,
@@ -353,6 +354,24 @@ class ShellTest(unittest.TestCase):
     def test_fake_controller_satisfies_protocol(self) -> None:
         controller = FakeController(default_state())
         self.assertIsInstance(controller, ControllerProtocol)
+
+    def test_identity_chip_shows_text_with_min_width(self) -> None:
+        chip = IdentityChip()
+        chip.set_identity(
+            "gx（Owner） · 12 分钟后过期",
+            tooltip="账户：gx\n组：Owner",
+            username="gx",
+            logged_in=True,
+            button_text="退出",
+        )
+        self.assertTrue(chip.label.text())
+        self.assertEqual(
+            chip.label.full_text(), "gx（Owner） · 12 分钟后过期"
+        )
+        self.assertGreaterEqual(chip.label.sizeHint().width(), 150)
+        self.assertGreaterEqual(chip.label.minimumWidth(), 150)
+        self.assertEqual(chip.button.text(), "退出")
+        chip.deleteLater()
 
     def test_nav_buttons_switch_pages(self) -> None:
         window, controller = self.make_window()

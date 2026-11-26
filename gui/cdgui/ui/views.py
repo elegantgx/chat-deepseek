@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPen
@@ -25,8 +26,11 @@ from PySide6.QtWidgets import (
 
 from ..domain.state import PageId
 from . import palette, tokens
-from .pages.base import Page
 from .primitives import Avatar, Badge, BrandLogo, Button, LockGlyph, Toast
+from .primitives.field import _ElidedLabel
+
+if TYPE_CHECKING:
+    from .pages.base import Page
 
 # 窗口骨架的固定尺度：这些不是控件高度尺度，属于外壳布局，单独命名避免
 # 页面代码里出现魔法数字。
@@ -320,15 +324,16 @@ class IdentityChip(QWidget):
         row.addWidget(self.lock, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self.avatar, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.label = QLabel("未登录", self)
-        self.label.setFont(tokens.font(12, 500))
-        self.label.setProperty("tone", "muted")
+        # 身份文字必须占住可见宽度：Ignored 策略会在 HBox 里被压到 0，
+        # 只剩头像和“退出”。超长时由 _ElidedLabel 中间省略，tooltip 保留全文。
+        self.label = _ElidedLabel("未登录", 12, 500, "muted", self)
         self.label.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
         )
         self.label.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
         )
+        self.label.setMinimumWidth(tokens.min_width(260))
         row.addWidget(self.label, 1)
 
         self.button = Button("登录", kind="secondary", size="sm", parent=self)
@@ -355,9 +360,10 @@ class IdentityChip(QWidget):
         self.avatar.setVisible(logged_in)
         if logged_in:
             self.avatar.set_username(username)
+        # _ElidedLabel.setText 会把全文放进 label 的 tooltip，省略时仍可读；
+        # chip 自身的 tooltip 用更完整的账户/组/过期信息。
         self.label.setText(text)
-        self.label.setToolTip(tooltip)
-        self.setToolTip(tooltip)
+        self.setToolTip(tooltip or text)
         self.setAccessibleName(text)
         if self.button.text() != button_text:
             self.button.setText(button_text)
