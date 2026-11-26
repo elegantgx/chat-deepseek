@@ -25,6 +25,17 @@ if (
   app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
 }
 
+// 容器和部分虚拟机没有 /dev/dri：GPU 进程会反复崩溃，Chromium 最后直接
+// "GPU process isn't usable. Goodbye." 并 SIGTRAP，窗口根本出不来。
+// 这种环境没有硬件合成可用，先关掉硬件加速，让软件合成把窗口画出来；
+// 正常的 Linux 桌面都有 /dev/dri，不受影响。
+if (process.platform === 'linux' && !fs.existsSync('/dev/dri')) {
+  console.warn('[gpu] 没有 /dev/dri，改用软件合成')
+  // 只调 disableHardwareAcceleration() 不够：GPU 进程仍会起来并 SIGSEGV，
+  // 必须让 Chromium 根本不启动它。
+  app.commandLine.appendSwitch('disable-gpu')
+}
+
 // 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
 // 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。
 app.setName('chat-deepseek')

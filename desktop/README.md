@@ -256,7 +256,9 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
 8. **登录态绑定 ipc 进程**：会话文件按「PID + 进程启动时间」命名，TTL 12 小时并在每次成功请求后续期，
    进程退出会主动吊销；重启应用需要重新登录（v1 刻意不做「记住我」）。
 9. **`service.*` 只有 Linux 用户级 systemd 实现**：其它平台返回 `unavailable`，页面会照原样展示后端文案。
-10. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
+10. **没有 `/dev/dri` 的环境自动走软件合成**（容器、部分虚拟机）：否则 Chromium 的 GPU 进程会反复崩溃，
+    最后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出，窗口根本出不来。正常桌面有 `/dev/dri`，不受影响。
+11. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
     装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
     对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的
     `chat-deepseek` 二进制跑通（无窗口、临时 userData、退出码 0）。
