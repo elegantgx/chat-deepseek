@@ -1,0 +1,7 @@
+{
+  "name": "chat-deepseek-desktop",
+  "private": true,
+  "description": "chat-deepseek 的 Electron 桌面外壳（骨架）",
+  "main": "dist/main.js",
+  "type": "commonjs"
+}
