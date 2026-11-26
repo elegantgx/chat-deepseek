@@ -25,6 +25,7 @@ from typing import Callable, Sequence
 
 import gui_config
 import parsing
+import server_config
 import service_plan
 
 from .domain import commands, reducers, rules
@@ -1145,6 +1146,43 @@ class Controller:
                 new_transport.close()
             except Exception:  # noqa: BLE001
                 pass
+
+    def migrate_legacy_backup_dir(self, legacy: str) -> None:
+        """把 v1 `config.gui.json` 的备份地址写进目标主机的 `config.json`。"""
+        if self._closing() or not legacy:
+            return
+        state = self._store.state
+        if state.target.remote:
+            # v1 的备份地址是本机路径，对远端没有意义。
+            return
+        host = rules.host_config(state)
+        if host is None:
+            return
+        if host.backup_dir != server_config.default_backup_dir(host.data_dir):
+            # 用户已经自定义过备份地址，不要覆盖。
+            return
+        gateway = self._gateway
+
+        def work(cancel: CancelToken) -> None:
+            gateway.config_set("backup_dir", legacy, cancel)
+
+        self._submit(
+            TaskKey.CONFIG,
+            work,
+            blocking=False,
+            on_success=lambda _value: self._legacy_backup_migrated(),
+            on_failure=self._legacy_backup_ignored,
+        )
+
+    def _legacy_backup_migrated(self) -> None:
+        self._notice(
+            "已把旧备份地址写入 config.json", tone=NoticeTone.SUCCESS
+        )
+        self._queue_info(blocking=False)
+
+    def _legacy_backup_ignored(self, _error: BaseException) -> None:
+        # 启动时的迁移失败不打断用户；下次启动 info 回填后还能再试。
+        return
 
     def save_server_config(self, values: dict[str, str]) -> None:
         if self._closing():

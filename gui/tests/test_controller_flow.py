@@ -1370,6 +1370,64 @@ class TargetTest(ControllerTestCase):
         self.assert_dialog(controller, "SSH 连接失败")
 
 
+class LegacyBackupMigrationTest(ControllerTestCase):
+    def bootstrapped(
+        self, transport: FakeTransport | None = None, **info: object
+    ) -> tuple[Controller, FakeTransport]:
+        transport = transport or FakeTransport(self.target)
+        transport.script(("info",), info_result(**info))
+        controller = self.make_controller(transport=transport)
+        controller.bootstrap()
+        self.drain()
+        return controller, transport
+
+    def test_migration_writes_default_backup_dir_and_rereads_info(self) -> None:
+        controller, transport = self.bootstrapped()
+        transport.script(("config", "set"), ok(("config", "set")))
+        transport.script(
+            ("info",), info_result(backup_dir="/old/backups")
+        )
+        controller.migrate_legacy_backup_dir("/old/backups")
+        self.drain()
+
+        sets = [argv for argv in transport.argv_calls if argv[:2] == ("config", "set")]
+        self.assertEqual(
+            sets,
+            [("config", "set", "backup_dir", "/old/backups", "--data-dir", "/data")],
+        )
+        self.assertEqual(
+            len([argv for argv in transport.argv_calls if argv[0] == "info"]), 2
+        )
+        self.assert_notice(controller, "已把旧备份地址写入 config.json")
+
+    def test_migration_skips_customized_backup_dir(self) -> None:
+        controller, transport = self.bootstrapped(backup_dir="/custom/backups")
+        calls_before = len(transport.calls)
+        controller.migrate_legacy_backup_dir("/old/backups")
+        self.drain()
+
+        self.assertEqual(len(transport.calls), calls_before)
+        self.assertEqual(transport.calls_for("config"), [])
+
+    def test_migration_skips_remote_target(self) -> None:
+        target = remote_target()
+        transport = FakeTransport(target)
+        transport.script(
+            ("info",),
+            info_result(data_dir="/srv/data", backup_dir="/srv/data/backups"),
+        )
+        controller = self.make_controller(transport=transport, target=target)
+        controller.bootstrap()
+        self.drain()
+        calls_before = len(transport.calls)
+
+        controller.migrate_legacy_backup_dir("/old/backups")
+        self.drain()
+
+        self.assertEqual(len(transport.calls), calls_before)
+        self.assertEqual(transport.calls_for("config"), [])
+
+
 class SettingsTest(ControllerTestCase):
     def bootstrapped(self, **info: object) -> tuple[Controller, FakeTransport]:
         transport = FakeTransport(self.target)
