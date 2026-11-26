@@ -1,6 +1,7 @@
 // Package ipc 实现桌面端使用的本地控制面：stdio + NDJSON 的 JSON-RPC 2.0 形状。
 //
-// 它供 GUI/Android 外壳读取服务状态与配置、执行备份和服务启停，避免解析 CLI 中文输出。
+// 它供 GUI/Android 外壳读取服务状态与配置，管理登录态/账户，执行备份、配置写入和服务启停/安装，
+// 避免解析 CLI 中文输出。
 // stdout 只写协议行（响应和事件），日志一律写 stderr。
 package ipc
 
@@ -34,11 +35,16 @@ const (
 	codeUnauthenticated  = "unauthenticated"   // 3
 	codePermissionDenied = "permission_denied" // 4
 	codeNotFound         = "not_found"
+	codeConflict         = "conflict"
 	codeUnavailable      = "unavailable"
 )
 
 // defaultProbeTimeout 是 TCP 探测超时；GUI 打开时不应被长时间阻塞。
 const defaultProbeTimeout = 300 * time.Millisecond
+
+// ipcSessionTTL 是 ipc 登录态的滑动有效期：每次授权成功的请求都会续到
+// 当前时间 + 12h。CLI 的 15 分钟一次性登录不适用于常驻的桌面窗口。
+const ipcSessionTTL = 12 * time.Hour
 
 var errLineTooLong = errors.New("ipc: 请求行过长")
 
@@ -57,10 +63,22 @@ type Server struct {
 	serviceOp chan struct{}
 	// backupOp 串行化备份创建/恢复/删除，避免同名归档互相覆盖。
 	backupOp sync.Mutex
+	// authOp 串行化登录/登出/账户变更：会话文件只有一份，账户操作还要
+	// 保证「授权 → 修改」之间不被另一个请求插队。
+	authOp sync.Mutex
+	// configOp 串行化 config.set 的读-改-写，避免并发写丢字段。
+	configOp sync.Mutex
 
-	// 测试可替换；生产分别落到 internal/service 与 journalctl。
+	// sessionRoot 为空时使用与 CLI 相同的运行时目录；测试可替换成临时目录。
+	sessionRoot string
+	host        hostKey
+	now         func() time.Time
+	sessionTTL  time.Duration
+
+	// 测试可替换；生产分别落到 internal/service、journalctl 与默认续期实现。
 	newService   func() serviceController
 	newLogTailer func() (logTailer, error)
+	renewHook    sessionRenewer
 
 	writerMu sync.Mutex
 	writer   *protocolWriter
@@ -92,6 +110,9 @@ func New(dataDir string, stderr io.Writer) (*Server, error) {
 		serviceOp:    make(chan struct{}, 1),
 		newService:   func() serviceController { return newSystemdController() },
 		newLogTailer: newJournalTailer,
+		host:         currentHostKey(),
+		now:          time.Now,
+		sessionTTL:   ipcSessionTTL,
 	}
 	for _, spec := range methodTable() {
 		s.methods[spec.name] = spec
@@ -192,6 +213,8 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	defer func() {
 		// 先停事件流再摘掉 writer，避免 Serve 返回后 tail goroutine 还往旧 writer 写。
 		s.stopLogTail()
+		// 登录态绑定当前进程：正常退出时主动吊销，失败只记 stderr。
+		s.cleanupOwnSessionOnExit()
 		s.setWriter(nil)
 	}()
 	var wg sync.WaitGroup
@@ -299,6 +322,18 @@ func notFoundError(message string) *rpcError {
 
 func unavailableError(message string) *rpcError {
 	return &rpcError{Code: codeUnavailable, Message: message}
+}
+
+func unauthenticatedError(message string) *rpcError {
+	return &rpcError{Code: codeUnauthenticated, Message: message}
+}
+
+func permissionDeniedError(message string) *rpcError {
+	return &rpcError{Code: codePermissionDenied, Message: message}
+}
+
+func conflictError(message string) *rpcError {
+	return &rpcError{Code: codeConflict, Message: message}
 }
 
 // readLine 读取一行，最多 MaxLineBytes；超长时丢弃本行剩余内容并返回 errLineTooLong。

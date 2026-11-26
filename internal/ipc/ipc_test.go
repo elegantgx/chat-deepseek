@@ -37,6 +37,8 @@ func newTestServer(t *testing.T, listen string) (*Server, string) {
 		t.Fatalf("创建服务: %v", err)
 	}
 	server.probeTimeout = 100 * time.Millisecond
+	// 认证测试会把会话文件写进运行时目录；隔离到临时目录，避免污染本机 CLI 登录态。
+	server.sessionRoot = t.TempDir()
 	return server, dir
 }
 
@@ -260,6 +262,8 @@ func TestStdoutOnlyProtocolLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建服务: %v", err)
 	}
+	// Serve 退出会读取会话目录；隔离到临时目录，避免落到真实运行时目录。
+	server.sessionRoot = t.TempDir()
 	input := "坏 JSON\n" + requestLine(1, "no.such.method") + "\n\n" +
 		requestLine(2, "system.status") + "\n"
 	responses, output := serve(t, server, input)
@@ -298,6 +302,16 @@ func TestCapabilitiesMatchesRegistry(t *testing.T) {
 		"service.stop",
 		"service.restart",
 		"service.logs",
+		"auth.whoami",
+		"auth.login",
+		"auth.logout",
+		"account.list",
+		"account.add",
+		"account.password",
+		"account.delete",
+		"config.set",
+		"service.install",
+		"service.uninstall",
 	}
 	if len(caps.Methods) != len(expected) {
 		t.Fatalf("methods=%v，期望 %v", caps.Methods, expected)
@@ -400,6 +414,8 @@ func TestStatusWithInvalidListenIsUnknown(t *testing.T) {
 }
 
 func TestRunEOFAndUsage(t *testing.T) {
+	// Run 内部创建 Server，无法直接替换 sessionRoot；把运行时目录指到临时目录。
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	dir := t.TempDir()
 	if err := config.Save(dir, config.Config{Listen: "127.0.0.1:1"}); err != nil {
 		t.Fatalf("写入配置: %v", err)

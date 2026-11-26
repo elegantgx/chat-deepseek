@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/elegantgx/chat-deepseek/internal/config"
+	"github.com/elegantgx/chat-deepseek/internal/service"
 )
 
 // fakeServiceController 让服务方法测试不依赖 systemd。
@@ -25,13 +26,22 @@ type fakeServiceController struct {
 	starts     int
 	stops      int
 	restarts   int
+	installs   int
+	uninstalls int
 	startErr   error
 	stopErr    error
 	restartErr error
+	supportErr error
+	installErr error
+	removeErr  error
 	pid        int
 	gate       chan struct{}
 	entered    chan struct{}
 	once       sync.Once
+
+	installResult service.InstallResult
+	lastInstall   service.InstallOptions
+	uninstallDone bool
 }
 
 func (f *fakeServiceController) Start(context.Context) error {
@@ -63,6 +73,28 @@ func (f *fakeServiceController) Restart(context.Context) error {
 
 func (f *fakeServiceController) MainPID(context.Context) (int, error) {
 	return f.pid, nil
+}
+
+func (f *fakeServiceController) SupportError() error {
+	return f.supportErr
+}
+
+func (f *fakeServiceController) Install(
+	_ context.Context,
+	opts service.InstallOptions,
+) (service.InstallResult, error) {
+	f.mu.Lock()
+	f.installs++
+	f.lastInstall = opts
+	f.mu.Unlock()
+	return f.installResult, f.installErr
+}
+
+func (f *fakeServiceController) Uninstall(context.Context) (bool, error) {
+	f.mu.Lock()
+	f.uninstalls++
+	f.mu.Unlock()
+	return f.uninstallDone, f.removeErr
 }
 
 func (f *fakeServiceController) counts() (int, int, int) {

@@ -35,6 +35,16 @@ func methodTable() []methodSpec {
 		{name: "service.stop", handle: (*Server).serviceStop},
 		{name: "service.restart", handle: (*Server).serviceRestart},
 		{name: "service.logs", handle: (*Server).serviceLogs},
+		{name: "auth.whoami", handle: noParams((*Server).authWhoami)},
+		{name: "auth.login", handle: (*Server).authLogin},
+		{name: "auth.logout", handle: (*Server).authLogout},
+		{name: "account.list", handle: (*Server).accountList},
+		{name: "account.add", handle: (*Server).accountAdd},
+		{name: "account.password", handle: (*Server).accountPassword},
+		{name: "account.delete", handle: (*Server).accountDelete},
+		{name: "config.set", handle: (*Server).configSet},
+		{name: "service.install", handle: (*Server).serviceInstall},
+		{name: "service.uninstall", handle: (*Server).serviceUninstall},
 	}
 }
 

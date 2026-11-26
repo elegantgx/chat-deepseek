@@ -7,13 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/elegantgx/chat-deepseek/internal/config"
+	"github.com/elegantgx/chat-deepseek/internal/database"
 	"github.com/elegantgx/chat-deepseek/internal/service"
 )
 
@@ -39,6 +42,9 @@ type serviceController interface {
 	Stop(ctx context.Context) error
 	Restart(ctx context.Context) error
 	MainPID(ctx context.Context) (int, error)
+	SupportError() error
+	Install(ctx context.Context, opts service.InstallOptions) (service.InstallResult, error)
+	Uninstall(ctx context.Context) (bool, error)
 }
 
 type systemdController struct {
@@ -89,6 +95,30 @@ func (c *systemdController) MainPID(ctx context.Context) (int, error) {
 	return pid, nil
 }
 
+func (c *systemdController) SupportError() error {
+	if c.manager == nil {
+		return service.ErrUnsupported
+	}
+	return c.manager.SupportError()
+}
+
+func (c *systemdController) Install(
+	ctx context.Context,
+	opts service.InstallOptions,
+) (service.InstallResult, error) {
+	if c.manager == nil {
+		return service.InstallResult{}, service.ErrUnsupported
+	}
+	return c.manager.Install(ctx, opts)
+}
+
+func (c *systemdController) Uninstall(ctx context.Context) (bool, error) {
+	if c.manager == nil {
+		return false, service.ErrUnsupported
+	}
+	return c.manager.Uninstall(ctx, service.ScopeUser)
+}
+
 type serviceStateResult struct {
 	State  string `json:"state"`
 	PID    int    `json:"pid"`
@@ -97,6 +127,11 @@ type serviceStateResult struct {
 
 type serviceStopResult struct {
 	State string `json:"state"`
+}
+
+type serviceInstallResult struct {
+	OK       bool   `json:"ok"`
+	UnitPath string `json:"unitPath"`
 }
 
 type serviceLogsResult struct {
@@ -232,6 +267,104 @@ func (s *Server) serviceLogs(params json.RawMessage) (any, *rpcError) {
 		s.startLogTail()
 	}
 	return serviceLogsResult{Lines: lines, Truncated: truncated}, nil
+}
+
+// serviceInstall 复用 internal/service 的用户级 unit 安装逻辑；IPC 不提供
+// --system/--enable 参数。force=true 对应 CLI 的 --force，用于桌面端「重新安装」。
+func (s *Server) serviceInstall(params json.RawMessage) (any, *rpcError) {
+	payload := struct {
+		Force *bool `json:"force"`
+	}{}
+	trimmed := strings.TrimSpace(string(params))
+	if trimmed != "" && trimmed != "null" {
+		if err := json.Unmarshal(params, &payload); err != nil {
+			return nil, badRequestError("参数必须是 JSON 对象且 force 为布尔值")
+		}
+	}
+	force := payload.Force != nil && *payload.Force
+
+	if !s.beginServiceOp() {
+		return nil, unavailableError("服务操作正在进行，请稍候")
+	}
+	defer s.endServiceOp()
+
+	controller := s.newService()
+	// 先判断平台能力，避免 Windows/macOS 上先报「数据目录未初始化」。
+	if err := controller.SupportError(); err != nil {
+		return nil, unavailableError(err.Error())
+	}
+	initialized, err := database.Initialized(s.dataDir)
+	if err != nil {
+		return nil, internalError("检查数据目录失败", err)
+	}
+	if !initialized {
+		return nil, unavailableError(fmt.Sprintf(
+			"数据目录尚未初始化：%s；先运行 chat-deepseek setup",
+			s.dataDir,
+		))
+	}
+	binary, err := currentBinaryPath()
+	if err != nil {
+		return nil, unavailableError(err.Error())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
+	defer cancel()
+	result, err := controller.Install(ctx, service.InstallOptions{
+		Scope:   service.ScopeUser,
+		DataDir: s.dataDir,
+		Binary:  binary,
+		Force:   force,
+	})
+	if err != nil {
+		return nil, serviceOperationError(err)
+	}
+	// warnings 只写 stderr，不塞进契约字段；GUI 需要诊断时看日志。
+	for _, warning := range result.Warnings {
+		s.logf("%s", warning)
+	}
+	return serviceInstallResult{OK: true, UnitPath: result.UnitPath}, nil
+}
+
+// serviceUninstall 停止并删除用户级 unit；unit 本来就不存在时仍返回 ok，
+// 保持和 CLI「服务未安装」+ 退出码 0 的幂等行为一致。
+func (s *Server) serviceUninstall(_ json.RawMessage) (any, *rpcError) {
+	if !s.beginServiceOp() {
+		return nil, unavailableError("服务操作正在进行，请稍候")
+	}
+	defer s.endServiceOp()
+
+	controller := s.newService()
+	if err := controller.SupportError(); err != nil {
+		return nil, unavailableError(err.Error())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
+	defer cancel()
+	removed, err := controller.Uninstall(ctx)
+	if err != nil {
+		return nil, serviceOperationError(err)
+	}
+	if removed {
+		// unit 已删除，跟随事件流没有意义，及时停掉。
+		s.stopLogTail()
+	}
+	return okResult{OK: true}, nil
+}
+
+// currentBinaryPath 与 CLI 的 executablePath 保持一致：解析符号链接并转成绝对路径，
+// 否则写进 unit 的 ExecStart 可能指向临时包装脚本。
+func currentBinaryPath() (string, error) {
+	path, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("定位当前二进制失败: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("解析二进制路径失败: %w", err)
+	}
+	return abs, nil
 }
 
 func parseLogTail(params json.RawMessage) (int, bool, *rpcError) {
