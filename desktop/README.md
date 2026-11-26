@@ -1,7 +1,7 @@
-# desktop/ — Electron 桌面端骨架
+# desktop/ — Electron 桌面端
 
-状态：**骨架**。能启动窗口、能通过 preload 与主进程通信、能把请求转发给 Go 的 `ipc` 子进程、渲染层能热更；
-页面、路由、视觉、业务全部未实现（`renderer/app.tsx` 只是占位）。
+状态：**可用**。窗口、preload 桥、Go `ipc` 子进程、渲染层热更都通了；视觉按 `docs/desktop-visual.md`
+定稿，服务/账户/备份/设置四个页面已经接真实 `ipc`。打包、代码签名、自动更新还没做。
 
 技术选择：主进程/preload 用 `tsc` 直接编译（不额外引 bundler），渲染层用 rspack（`target: web`）打包，
 `index.html` 由 Electron `loadFile` 走 `file://` 加载。依赖全部复用仓库根 `node_modules`，
@@ -20,8 +20,11 @@ desktop/
   package.json       仅声明 "type": "commonjs" + main 入口，无依赖
   renderer/
     index.html       挂载点，HtmlRspackPlugin 注入 defer 脚本
-    main.tsx         挂载 React
-    app.tsx          占位壳：一行标题 + 四个空导航项 + 后端状态
+    main.tsx         挂载 React（渲染层入口）
+    app/             外壳：frame、hash 路由、主题、host 桥、mock 替身、状态栏
+    pages/           服务 / 账户 / 备份 / 设置四个页面（只画纸面内容）
+    ui/              设计系统：token、按钮、卡片、表格、对话框、Toast 等
+    gallery/         组件总览页（单独入口，验收视觉用）
   dist/              构建产物（根 .gitignore 已忽略）
 ```
 
@@ -242,15 +245,18 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
    `backend_unavailable`（窗口仍显示）。没有重试、没有退避、没有进程守护。
 2. **Go 侧 `ipc` 子命令的进度不在本骨架的控制范围内**：协议细节以 `docs/ipc.md` 为准；
    本骨架按「一行一个 JSON、`id` 回显、stdout 只有协议、日志走 stderr」实现。
-3. 渲染层没有 CSP、错误边界、路由、i18n、主题；`app.tsx` 只是占位，样式一行没写。
+3. 渲染层没有 CSP、错误边界、i18n；路由只有 hash（`#service` 等），没有多窗口。
 4. 主进程没有热重载，没有菜单定制、托盘、多窗口、协议处理（deep link）、自动更新。
 5. 未在 Windows/macOS 实机验证；容器/CI 里若 `$HOME` 只读，正常启动必须把 userData 指到可写目录
    （见上文），否则 Chromium 直接 SIGTRAP；`chrome-sandbox` 缺 setuid 时还要临时加 `--no-sandbox`（仅测试用）。
-6. `event.*` 事件通道已打通，但 `docs/ipc.md` 的 v1 不产出事件，所以真实环境里暂时只会看到
-   `event.backend.state`。
+6. 事件通道有 `event.backend.state`（主进程发）和 `event.service.log`（Go 侧日志跟随）；
+   服务日志只在 Linux 用户级 systemd + journalctl 可用时才有。
 7. 热更只验证了「dev server 起得来 + Electron 能加载它」；没有可视环境，没实际观察过改文件后的
    HMR 替换。`pnpm dev` 那套 8090/8091 与桌面端无关，桌面端 dev server 用 8092。
-8. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
-   装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
-   对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路（无窗口 + 临时 userData）只做了静态检查，
-   没有在这台机器上实跑。
+8. **登录态绑定 ipc 进程**：会话文件按「PID + 进程启动时间」命名，TTL 12 小时并在每次成功请求后续期，
+   进程退出会主动吊销；重启应用需要重新登录（v1 刻意不做「记住我」）。
+9. **`service.*` 只有 Linux 用户级 systemd 实现**：其它平台返回 `unavailable`，页面会照原样展示后端文案。
+10. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
+    装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
+    对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的
+    `chat-deepseek` 二进制跑通（无窗口、临时 userData、退出码 0）。
