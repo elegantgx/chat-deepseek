@@ -102,18 +102,24 @@ gui/.venv/bin/python -m unittest discover -s gui/tests
 
 ## 8. 状态与文档索引
 
-当前（2026-11-26）：
+当前（2026-11-27）：
 
 - v1 服务端可用：账户/组、登录/CSRF、设置与 Key 加密、会话版本锁、附件、DeepSeek 代理、Web UI 嵌入、`info`/`config set`/`service`/`backup` 均已完成；`go test ./...`、`go vet ./...` 通过。
 - 前端：`pnpm type`、`pnpm lint`、`pnpm build` 通过。无自动化测试。
-- GUI：`refactor/gui-core` 完成（`app.py` 46 行、`cdgui/` 分层、四页、627 个测试通过）；尚未合并回 `feature/dev`。
-- GUI 视觉重做（Apple Liquid Glass 方向）在 `refactor/gui-liquid-glass` **暂停中**，等用户确认效果图后再继续；该分支的视觉方案未定稿，不要据此改产品代码。
-- 已知未覆盖：真机 SSH/systemd、PyInstaller 打包、Windows 父进程链运行时验证；GUI 暂无公开 `refresh_info()`。
+- **桌面端改为 Electron**（`desktop/`），`gui/`（PySide6）是上一代外壳，只作为行为参考，不再加功能，最终删除。
+  渲染层与主进程的桥是 `ipc`；浏览器仍只走 `/api/v1`，两条通道不要混用。
+- `ipc` 控制面（`internal/ipc` + `docs/ipc.md`）已经可用：状态/能力/配置投影、备份增删列、
+  服务启停与日志事件流；`ipcVersion` 为 1，新增方法算兼容增量。
+- 桌面端视觉已定稿（`docs/desktop-visual.md`），设计系统在 `desktop/renderer/ui/`，
+  四个页面正在 `desktop/renderer/pages/` 落地；`gui/` 的 Liquid Glass 试验已废弃，不要参考。
+- 已知未覆盖：真机 SSH/systemd、Windows/macOS 桌面端验证、打包与自动更新；Electron 只在本机 Linux 桌面跑过。
 
 细节文档：
 
 - `docs/architecture.md`：分层、数据模型、API、CLI 契约、核心流程、v1 设计、高风险点、上游同步。
-- `docs/gui.md`：GUI 分层与四页、登录/权限、SSH、systemd、配置迁移、测试与视觉层。
+- `docs/ipc.md`：本地控制面契约（信封、错误码、方法表、事件、与 `/api/v1` 的分工）。
+- `docs/desktop-visual.md`：桌面端视觉规范（层次、判据、尺寸、日志区）与核对方法。
+- `docs/gui.md`：上一代 PySide6 GUI 的分层与行为基线（迁移参考）。
 - `docs/operations.md`：门禁命令、手动冒烟与验收清单、发布流水线、版本规则、环境限制、历史决策。
-- `gui/REFACTOR_PLAN.md` / `gui/BEHAVIOR_BASELINE.md`：GUI 重构设计依据与行为基线。
+- `desktop/README.md`：Electron 骨架、`ipc` 桥、平台差异与已知限制。
 - `README.md`：用户安装、运行、数据说明。
