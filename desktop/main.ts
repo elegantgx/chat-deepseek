@@ -61,6 +61,7 @@ if (softwareRendering) {
  */
 let gpuFallbackTriggered = false
 app.on('child-process-gone', (_event, details) => {
+  trace('child-process-gone', details.type, details.reason, `exit=${details.exitCode}`)
   if (details.type !== 'GPU' || softwareRendering || gpuFallbackTriggered) {
     return
   }
@@ -83,6 +84,14 @@ const REQUEST_TIMEOUT_MS = 10_000
 const isDev = !app.isPackaged
 /** 冒烟模式：窗口从不显示，只验证两条链路后自退 */
 const smoke = process.argv.includes('--smoke') || process.env.CHAT_DEEPSEEK_SMOKE === '1'
+/** 排障用：CHAT_DEEPSEEK_DEBUG=1 时把窗口与进程事件打到 stderr，定位「没反应/自己退出」 */
+const debugLifecycle = process.env.CHAT_DEEPSEEK_DEBUG === '1'
+function trace(...args: unknown[]): void {
+  if (debugLifecycle) {
+    console.warn('[lifecycle]', ...args)
+  }
+}
+
 /** 与原生主题保持一致的窗口底色，避免加载期白闪 */
 const DARK_BACKGROUND = '#1f1f1f'
 const LIGHT_BACKGROUND = '#ffffff'
@@ -389,6 +398,20 @@ function createWindow(): void {
     },
   })
   mainWindow = win
+  trace('window-created', `visible=${win.isVisible()}`)
+  win.once('ready-to-show', () => trace('ready-to-show'))
+  win.once('show', () => trace('window-shown'))
+  win.once('closed', () => trace('window-closed'))
+  win.webContents.once('did-finish-load', () => trace('did-finish-load'))
+  win.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error('[window] 加载失败', code, description, url)
+  })
+  win.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error('[window] preload 失败', preloadPath, error)
+  })
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[window] 渲染进程退出', details.reason, `exit=${details.exitCode}`)
+  })
 
   if (smoke) {
     // 冒烟模式绝不显示窗口：用 did-finish-load 判断渲染层已就绪，
@@ -459,10 +482,18 @@ function bootstrap(): void {
 }
 
 // 单实例：两个进程会各自 spawn 一个 Go 后端，锁失败方直接退出
-if (!app.requestSingleInstanceLock()) {
+const gotLock = app.requestSingleInstanceLock()
+trace('single-instance-lock', gotLock)
+if (!gotLock) {
   app.quit()
 } else {
+  app.on('second-instance', () => trace('second-instance'))
+  app.on('before-quit', () => trace('before-quit'))
+  app.on('will-quit', () => trace('will-quit'))
+  app.on('quit', () => trace('quit'))
+  process.on('exit', (code) => trace('process-exit', code))
   app.on('second-instance', () => {
+    trace('second-instance-handler')
     // 冒烟模式没有可见窗口，别为了「聚焦」把窗口弹出来
     if (smoke) {
       return
