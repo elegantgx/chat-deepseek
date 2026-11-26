@@ -609,6 +609,7 @@ class AccountsPageTest(unittest.TestCase):
 
         form = FakeAccountForm.instances[0]
         self.assertEqual(form.mode, "user")
+        self.assertTrue(page._is_owner)
         self.assertTrue(form.allow_groups)
         self.assertEqual(controller.names(), ["add_user"])
         self.assertEqual(
@@ -634,6 +635,7 @@ class AccountsPageTest(unittest.TestCase):
         ):
             page.add_button.click()
 
+        self.assertFalse(page._is_owner)
         self.assertFalse(FakeAccountForm.instances[0].allow_groups)
 
     def test_header_verdicts_follow_data_and_login(self) -> None:

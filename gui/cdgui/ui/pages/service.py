@@ -56,7 +56,6 @@ class ServicePage(Page):
         self._page_url = ""
         self._auto_opened_url: str | None = None
         self._primary_setup = False
-        self._info_error = False
         self._buttons = {}
 
         self._build()
@@ -275,9 +274,6 @@ class ServicePage(Page):
             # 空文案让 apply_verdict 保留控件自己的文字（如“改为 systemd 常驻…”）。
             verdict = replace(verdict, text="")
         render.apply_verdict(widget, verdict)
-        if self._info_error and verdict.enabled:
-            widget.setEnabled(False)
-            widget.setToolTip("状态读取失败，暂时不能操作")
 
     def _apply_action(self, action, action_id: ActionId) -> None:
         """QAction 没有 ``isHidden``；只同步可见/启用/提示，不改菜单文案。"""
@@ -286,19 +282,13 @@ class ServicePage(Page):
             return
         if action.isVisible() != verdict.visible:
             action.setVisible(verdict.visible)
-        enabled = verdict.enabled
-        if self._info_error and enabled:
-            enabled = False
-        action.setEnabled(enabled)
-        action.setToolTip(
-            "状态读取失败，暂时不能操作" if self._info_error else verdict.tooltip
-        )
+        action.setEnabled(verdict.enabled)
+        action.setToolTip(verdict.tooltip)
 
     def render(self, ui: "UiState", state: "AppState | None") -> None:
         if state is None:
             return
         self._buttons = dict(ui.buttons)
-        self._info_error = bool(state.info_error)
         self._page_url = ui.page_url
 
         self._render_status(ui, state)

@@ -133,6 +133,7 @@ class AccountsPage(Page):
         self._empty_mode = ""
         self._buttons = {}
         self._busy = False
+        self._is_owner = False
 
         self._build()
         self._connect()
@@ -380,10 +381,8 @@ class AccountsPage(Page):
         )
 
     def _add_account(self) -> None:
-        identity = self.controller.state.identity
-        allow_groups = bool(identity is not None and identity.is_owner)
         form = AccountForm(
-            self.widget, mode="user", allow_groups=allow_groups
+            self.widget, mode="user", allow_groups=self._is_owner
         )
         value = form.exec_modal()
         if isinstance(value, tuple) and len(value) == 3:
@@ -453,6 +452,7 @@ class AccountsPage(Page):
             return
         self._buttons = dict(ui.buttons)
         self._busy = bool(ui.busy)
+        self._is_owner = bool(ui.is_owner)
 
         if state.users != self._users_snapshot:
             self._users_snapshot = state.users

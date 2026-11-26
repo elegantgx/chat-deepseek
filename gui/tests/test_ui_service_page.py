@@ -24,6 +24,7 @@ from cdgui.domain.facts import (
     HostConfig,
     ServiceStatus,
 )
+from cdgui.domain.rules import ActionId
 from cdgui.domain.state import AppState
 from cdgui.domain.target import ConnectionKind, Endpoint, Target
 from cdgui.ui.pages import service as service_page
@@ -343,21 +344,34 @@ class ServicePageTest(unittest.TestCase):
         self.assertEqual(controller.names(), ["set_page"])
         self.assertEqual(controller.calls[0][1][0].value, "accounts")
 
-    def test_info_error_shows_banner_and_disables_actions(self) -> None:
+    def test_info_error_shows_banner_but_keeps_verdicts(self) -> None:
         target = local_target()
         host = host_for(target, installed=True, active=True)
         state = state_for(target, host, info_error="ssh: connect timed out")
         page, _ = self.build_page(state)
+        ui = derive_ui(state, NOW)
 
         self.assertTrue(page.banner.isVisible())
         self.assertIn("状态读取失败", page.banner_label.text())
-        self.assertFalse(page.primary_button.isEnabled())
-        self.assertFalse(page.restart_button.isEnabled())
-        self.assertFalse(page.open_button.isEnabled())
-        self.assertFalse(page.update_action.isEnabled())
+        # 读不到 info 不等于旧配置不能操作：按钮仍只看 Verdict。
+        self.assertTrue(page.primary_button.isEnabled())
         self.assertEqual(
-            page.primary_button.toolTip(), "状态读取失败，暂时不能操作"
+            page.primary_button.isEnabled(),
+            ui.buttons[ActionId.STOP].enabled,
         )
+        self.assertEqual(
+            page.primary_button.toolTip(),
+            ui.buttons[ActionId.STOP].tooltip,
+        )
+        self.assertEqual(
+            page.restart_button.isEnabled(),
+            ui.buttons[ActionId.RESTART].enabled,
+        )
+        self.assertEqual(
+            page.open_button.isEnabled(),
+            ui.buttons[ActionId.OPEN_PAGE].enabled,
+        )
+        self.assertTrue(page.update_action.isEnabled())
         retry = [
             button
             for button in page.widget.findChildren(service_page.primitives.Button)
