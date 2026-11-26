@@ -1,0 +1,21 @@
+/* 对话框内的表单：字段纵向排开，和 Dialog 的标题 / 操作区共用同一条 20 留白 */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+/* Segmented 自己没有字段标签，这里补一个和 Field 同规格的 label */
+.roleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.roleLabel {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+}
