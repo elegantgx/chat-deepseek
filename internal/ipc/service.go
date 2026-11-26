@@ -26,6 +26,9 @@ const (
 	serviceOperationTimeout = 30 * time.Second
 	// logsReadTimeout 只用于一次性的“读最近 N 行”，不用于跟随。
 	logsReadTimeout = 5 * time.Second
+	// serviceStatusTimeout 限制一次安装状态读取。Status 只做 os.Stat 加少量 systemctl
+	// 查询，但它出现在 GUI 启动路径（system.status）上，不能因为 systemd 卡住就拖慢探测。
+	serviceStatusTimeout = 2 * time.Second
 
 	defaultLogTail = 200
 	maxLogTail     = 5000
@@ -42,6 +45,7 @@ type serviceController interface {
 	Stop(ctx context.Context) error
 	Restart(ctx context.Context) error
 	MainPID(ctx context.Context) (int, error)
+	Status(ctx context.Context) (service.Status, error)
 	SupportError() error
 	Install(ctx context.Context, opts service.InstallOptions) (service.InstallResult, error)
 	Uninstall(ctx context.Context) (bool, error)
@@ -93,6 +97,14 @@ func (c *systemdController) MainPID(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("解析 MainPID: %w", err)
 	}
 	return pid, nil
+}
+
+// Status 只投影「平台支持 / 单元是否安装」；systemd 不可用时返回 Supported:false，不报错。
+func (c *systemdController) Status(ctx context.Context) (service.Status, error) {
+	if c.manager == nil {
+		return service.Status{Supported: false}, nil
+	}
+	return c.manager.Status(ctx, service.ScopeUser)
 }
 
 func (c *systemdController) SupportError() error {
@@ -246,6 +258,20 @@ func (s *Server) serviceLogs(params json.RawMessage) (any, *rpcError) {
 	tail, truncated, rpcErr := parseLogTail(params)
 	if rpcErr != nil {
 		return nil, rpcErr
+	}
+	// unit 没安装时 journal 里仍可能留着上次安装的旧记录，读出来会被当成「最近日志」；
+	// 而且未安装的 unit 没有跟随的意义，所以直接给空数组，不读 journal、也不开事件流。
+	// Status 失败（权限、systemctl 异常）时按「无法确认」继续走原读取路径：
+	// 一次状态查询失败不应该把还能读到的日志整个吞掉，错误只写 stderr。
+	controller := s.newService()
+	statusCtx, statusCancel := context.WithTimeout(context.Background(), serviceStatusTimeout)
+	defer statusCancel()
+	status, statusErr := controller.Status(statusCtx)
+	if statusErr != nil {
+		s.logf("读取服务安装状态失败: %v", statusErr)
+	}
+	if statusErr == nil && !status.Installed {
+		return serviceLogsResult{Lines: []string{}, Truncated: truncated}, nil
 	}
 	tailer, err := s.newLogTailer()
 	if err != nil {
@@ -404,7 +430,11 @@ var errLogsUnavailable = errors.New("当前环境没有可用的服务日志")
 
 // journalTailer 读取 systemd 用户单元的 journal。unit 的 stdout/stderr 都由 systemd
 // 收进 journal，CLI 的 serve 本身不写日志文件。
-type journalTailer struct{}
+type journalTailer struct {
+	// run 执行 journalctl 并返回 stdout。默认走 exec，测试可替换成固定输出，
+	// 这样格式化逻辑不需要真的依赖本机 journal。
+	run func(ctx context.Context, args ...string) ([]byte, error)
+}
 
 func newJournalTailer() (logTailer, error) {
 	if runtime.GOOS != "linux" {
@@ -413,38 +443,141 @@ func newJournalTailer() (logTailer, error) {
 	if _, err := exec.LookPath("journalctl"); err != nil {
 		return nil, fmt.Errorf("%w：找不到 journalctl", errLogsUnavailable)
 	}
-	return journalTailer{}, nil
+	return journalTailer{run: runJournalctl}, nil
 }
 
-func (journalTailer) Tail(n int) ([]string, error) {
+func runJournalctl(ctx context.Context, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, "journalctl", args...).Output()
+}
+
+// Tail 读取最近 n 条 journal 记录，压成渲染层能直接吃的 `HH:MM:SS LEVEL message`。
+// 以前用 `-o cat` 会丢掉时间戳，渲染层只好把每条历史日志都标成“现在”；
+// 这里改读 json，用 __REALTIME_TIMESTAMP 和 PRIORITY 还原真实时间与级别。
+func (t journalTailer) Tail(n int) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), logsReadTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(
+	run := t.run
+	if run == nil {
+		run = runJournalctl
+	}
+	out, err := run(
 		ctx,
-		"journalctl",
 		"--user",
 		"-u", service.UnitName,
 		"-n", strconv.Itoa(n),
 		"--no-pager",
-		"-o", "cat",
-	).Output()
+		"-o", "json",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("%w：%v", errLogsUnavailable, err)
 	}
-	text := strings.TrimSuffix(string(out), "\n")
-	if strings.TrimSpace(text) == "" {
-		return []string{}, nil
-	}
-	lines := strings.Split(text, "\n")
-	result := lines[:0]
-	for _, line := range lines {
-		line = strings.TrimSuffix(line, "\r")
-		if line == "-- No entries --" {
+	return formatJournalEntries(out), nil
+}
+
+// journalEntry 只取格式化需要的字段。PRIORITY 与时间戳在 journal 的 json 输出里
+// 可能是字符串也可能是数字（不同 systemd 版本/字段类型），所以保留 RawMessage 再解析。
+type journalEntry struct {
+	Message           json.RawMessage `json:"MESSAGE"`
+	Priority          json.RawMessage `json:"PRIORITY"`
+	RealtimeTimestamp json.RawMessage `json:"__REALTIME_TIMESTAMP"`
+}
+
+// formatJournalEntries 逐行解析 journalctl -o json 的输出；坏行（非 JSON 的提示、
+// 空行）跳过，不让一条异常记录毁掉整份快照。
+func formatJournalEntries(out []byte) []string {
+	lines := make([]string, 0, 16)
+	for _, raw := range bytes.Split(out, []byte{'\n'}) {
+		line := bytes.TrimSpace(raw)
+		if len(line) == 0 || bytes.Equal(line, []byte("-- No entries --")) {
 			continue
 		}
-		result = append(result, line)
+		var entry journalEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			continue
+		}
+		message := foldJournalMessage(decodeJournalMessage(entry.Message))
+		if message == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf(
+			"%s %s %s",
+			journalClock(entry.RealtimeTimestamp),
+			journalLevel(entry.Priority),
+			message,
+		))
 	}
-	return result, nil
+	return lines
+}
+
+// decodeJournalMessage 还原 MESSAGE。正常是字符串；非 UTF-8 消息会被 journald
+// 编码成字节数组，这里一并按字节还原，避免把这类日志整条丢掉。
+func decodeJournalMessage(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	var data []byte
+	if err := json.Unmarshal(raw, &data); err == nil {
+		return string(data)
+	}
+	return ""
+}
+
+// journalScalar 把 json 里的字符串或数字统一成文本；解析失败返回空串。
+func journalScalar(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// journalClock 把微秒时间戳转成本地时区的 HH:MM:SS。时间戳缺失时退回读取时刻：
+// 宁可把这一行标成现在，也不要显示成 1970 年。
+func journalClock(raw json.RawMessage) string {
+	micros, err := strconv.ParseInt(journalScalar(raw), 10, 64)
+	if err != nil || micros <= 0 {
+		return time.Now().Format("15:04:05")
+	}
+	return time.UnixMicro(micros).Format("15:04:05")
+}
+
+// journalLevel 映射 syslog priority：<=3 错误、4 警告、其余信息。缺失或非法时按
+// INFO 处理，未知级别不该被涂成错误色。
+func journalLevel(raw json.RawMessage) string {
+	priority, err := strconv.Atoi(journalScalar(raw))
+	if err != nil {
+		return "INFO"
+	}
+	switch {
+	case priority <= 3:
+		return "ERROR"
+	case priority == 4:
+		return "WARN"
+	default:
+		return "INFO"
+	}
+}
+
+// foldJournalMessage 把多行/空行 message 压成一行：日志区一行一条，
+// 空行会破坏行高和「共 N 行」计数，所以空段直接丢掉。
+func foldJournalMessage(message string) string {
+	parts := strings.FieldsFunc(message, func(r rune) bool {
+		return r == '\n' || r == '\r'
+	})
+	folded := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			folded = append(folded, trimmed)
+		}
+	}
+	return strings.Join(folded, " / ")
 }
 
 func (journalTailer) Follow(ctx context.Context, emit func(line, stream string)) error {

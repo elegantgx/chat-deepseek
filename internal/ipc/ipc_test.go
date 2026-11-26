@@ -14,6 +14,7 @@ import (
 
 	"github.com/elegantgx/chat-deepseek/internal/buildinfo"
 	"github.com/elegantgx/chat-deepseek/internal/config"
+	"github.com/elegantgx/chat-deepseek/internal/service"
 )
 
 type testResponse struct {
@@ -403,6 +404,10 @@ func TestProbeStates(t *testing.T) {
 
 func TestStatusWithInvalidListenIsUnknown(t *testing.T) {
 	server, _ := newTestServer(t, "not-a-host-port")
+	// 状态投影不依赖本机 systemd：固定成支持且已安装，避免测试摸真实 unit。
+	server.newService = func() serviceController {
+		return &fakeServiceController{status: service.Status{Supported: true, Installed: true}}
+	}
 	value, rpcErr := server.systemStatus()
 	if rpcErr != nil {
 		t.Fatalf("status: %+v", rpcErr)

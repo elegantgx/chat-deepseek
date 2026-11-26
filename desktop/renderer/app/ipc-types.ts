@@ -14,6 +14,10 @@ export interface SystemStatus {
     state: ServiceState
     listen: string
     source: 'probe'
+    /** systemd 用户单元是否已安装；不可用平台恒为 false */
+    installed: boolean
+    /** 当前平台是否有可用的 systemd 用户管理器 */
+    supported: boolean
   }
 }
 

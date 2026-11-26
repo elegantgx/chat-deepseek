@@ -64,6 +64,8 @@
   margin: 2px 0 20px;
 }
 
+/* 28px 玻璃圆角砖；品牌图是 20px（BrandMark 自己带尺寸），四周留 4px 呼吸。
+   传内联 svg 图标时仍走下面的 17px。 */
 .brandMark {
   width: 28px;
   height: 28px;

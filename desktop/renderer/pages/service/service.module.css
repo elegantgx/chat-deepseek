@@ -48,6 +48,12 @@
   box-shadow: 0 0 0 4px var(--hover);
 }
 
+/* 平台不支持 systemd：状态本身是错误，和读取失败的色系保持一致 */
+.dotError {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+
 /* 状态读取失败：整块换成错误说明 + 重试，右侧元信息同时留空 */
 .statusError {
   display: flex;
@@ -75,14 +81,6 @@
   line-height: var(--lh-22);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
-}
-
-.statusSub {
-  /* 让说明文字与状态字对齐（圆点 8 + 间距 8） */
-  padding-left: var(--sp-16);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  color: var(--text-3);
 }
 
 .meta {

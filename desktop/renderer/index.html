@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 品牌图标与侧栏共用 renderer/assets/brand.svg；产物的文件名带 contenthash，
+         这里写不出稳定地址，href 由 app/frame.tsx 在挂载后指到真实 URL。 -->
+    <link rel="icon" type="image/svg+xml" id="brand-icon" />
     <title>chat-deepseek</title>
   </head>
   <body>

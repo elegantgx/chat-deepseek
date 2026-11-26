@@ -58,6 +58,40 @@ function archiveName(date: Date): string {
   )
 }
 
+function clockTime(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+/**
+ * 播种日志只在服务「运行中」时调用：还没启动就摆着历史日志，正是
+ * 「服务没跑却像刚发生过」的观感来源。格式与真后端一致（HH:MM:SS LEVEL message），
+ * 时间按 now 往前错开，避免整屏都是同一秒。
+ */
+function seedLogs(now: Date): string[] {
+  const entries: Array<[number, 'INFO' | 'WARN' | 'ERROR', string]> = [
+    [-92, 'INFO', 'serve listening on 127.0.0.1:8091'],
+    [-88, 'INFO', 'database opened: data/chat.db (journal=wal)'],
+    [-84, 'INFO', 'webui embedded build 0.1.4-official0.1.4'],
+    [-61, 'INFO', 'login ok user=gx ip=127.0.0.1'],
+    [-57, 'INFO', 'session 9f3c…31 created (branch main)'],
+    [-43, 'INFO', 'settings updated: theme=system lang=zh'],
+    [-31, 'INFO', 'session 9f3c…31 saved version=42 (18ms)'],
+    [-24, 'INFO', 'stream proxy deepseek-chat 128 tok/s'],
+    [-19, 'WARN', 'backup skipped: wal file present'],
+    [-14, 'ERROR', 'restore failed: service is running'],
+    [-9, 'INFO', 'GET /api/service 200 (3ms)'],
+    [-7, 'INFO', 'GET /api/sessions 200 (7ms)'],
+    [-5, 'INFO', 'POST /api/chat/stream 200 (1.2s)'],
+    [-3, 'INFO', 'session 9f3c…31 saved version=43 (12ms)'],
+    [-1, 'INFO', 'attachment stored: 7f2a…c9 (42.1 KB)'],
+  ]
+  return entries.map(
+    ([offset, level, message]) =>
+      `${clockTime(new Date(now.getTime() + offset * 1000))} ${level} ${message}`
+  )
+}
+
 function seedBackups(now: Date): BackupEntry[] {
   const sizes = [48.2, 47.9, 47.1, 46.8, 46.5]
   return sizes.map((mb, index) => {
@@ -176,6 +210,8 @@ interface MockState {
   startTimer: number | null
   installed: boolean
   unitPath: string
+  /** `desktop.dataDir.set` 保存的待生效目录；current 不跟着变，模拟重启后生效 */
+  savedDataDir: string
   config: ConfigProjection
   backups: BackupEntry[]
   accounts: AccountRow[]
@@ -183,19 +219,26 @@ interface MockState {
   logs: string[]
 }
 
-/** hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、`statuserr` 状态读失败 */
+/**
+ * hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、
+ * `statuserr` 状态读失败、`uninstalled` 初始未安装。
+ */
 function hashFlags(): {
   running: boolean
   emptyBackups: boolean
   signedOut: boolean
   statusError: boolean
+  uninstalled: boolean
 } {
   const raw = window.location.hash.replace(/^#\/?/, '')
+  const uninstalled = /(^|-)uninstalled($|-)/.test(raw)
   return {
-    running: !/(^|-)off($|-)/.test(raw),
+    // 未安装的服务不可能在运行，否则「安装后立刻变成运行中」会误导验收。
+    running: !/(^|-)off($|-)/.test(raw) && !uninstalled,
     emptyBackups: /(^|-)empty($|-)/.test(raw),
     signedOut: /(^|-)login($|-)/.test(raw),
     statusError: /(^|-)statuserr($|-)/.test(raw),
+    uninstalled,
   }
 }
 
@@ -207,8 +250,9 @@ export function createMockHost(): HostClient {
     starting: false,
     pid: 4821,
     startTimer: null,
-    installed: true,
+    installed: !flags.uninstalled,
     unitPath: '~/.config/systemd/user/chat-deepseek.service',
+    savedDataDir: '',
     config: {
       dataDir: '/home/<user>/chat-deepseek/data',
       listen: '127.0.0.1:8091',
@@ -224,23 +268,8 @@ export function createMockHost(): HostClient {
       groups: ['Admin', 'User'],
       expiresAt: rfc3339(new Date(now.getTime() + 12 * 60 * 60 * 1000)),
     },
-    logs: [
-      'serve listening on 127.0.0.1:8091',
-      'database opened: data/chat.db (journal=wal)',
-      'webui embedded build 0.1.4-official0.1.4',
-      'login ok user=gx ip=127.0.0.1',
-      'session 9f3c…31 created (branch main)',
-      'settings updated: theme=system lang=zh',
-      'session 9f3c…31 saved version=42 (18ms)',
-      'stream proxy deepseek-chat 128 tok/s',
-      'backup skipped: wal file present',
-      'restore failed: service is running',
-      'GET /api/service 200 (3ms)',
-      'GET /api/sessions 200 (7ms)',
-      'POST /api/chat/stream 200 (1.2s)',
-      'session 9f3c…31 saved version=43 (12ms)',
-      'attachment stored: 7f2a…c9 (42.1 KB)',
-    ],
+    // 只有确实在运行才播种日志；`#off` / `#uninstalled` 下是空数组。
+    logs: flags.running ? seedLogs(now) : [],
   }
 
   const listeners = new Set<(method: string, params: unknown) => void>()
@@ -258,6 +287,9 @@ export function createMockHost(): HostClient {
       state: state.starting ? 'starting' : state.running ? 'running' : 'stopped',
       listen: state.config.listen,
       source: 'probe',
+      installed: state.installed,
+      // 浏览器替身只在 Linux 桌面做验收，systemd 能力固定为可用。
+      supported: true,
     },
   })
 
@@ -281,8 +313,9 @@ export function createMockHost(): HostClient {
     }
   }
 
-  const appendLog = (line: string) => {
-    state.logs.push(line)
+  const appendLog = (line: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') => {
+    // 快照与真后端一样带真实时间和级别；事件仍是原始 message，渲染层按收到时刻补时间。
+    state.logs.push(`${clockTime(new Date())} ${level} ${line}`)
     const event: ServiceLogEvent = { line, stream: 'stdout' }
     emit('event.service.log', event)
   }
@@ -334,6 +367,8 @@ export function createMockHost(): HostClient {
         'account.add',
         'account.password',
         'account.delete',
+        'desktop.dataDir',
+        'desktop.dataDir.set',
       ],
       features: {
         systemd: true,
@@ -345,6 +380,27 @@ export function createMockHost(): HostClient {
       ipcVersion: 1,
     }),
     'config.get': () => ({ ...state.config }),
+    /** 设置页的数据目录投影：current 是正在使用的目录，saved 是待重启生效的目录 */
+    'desktop.dataDir': () => ({
+      current: state.config.dataDir,
+      saved: state.savedDataDir,
+      envOverride: null,
+      restartRequired: state.savedDataDir !== '',
+    }),
+    'desktop.dataDir.set': (params) => {
+      const dataDir = requireString(requireObject(params).dataDir, 'dataDir')
+      if (!isAbsolutePath(dataDir)) {
+        fail('bad_request', 'dataDir 必须是绝对路径')
+      }
+      // 模拟「重启后生效」：current 保持不变，避免浏览器里假装即时生效。
+      state.savedDataDir = dataDir
+      return {
+        current: state.config.dataDir,
+        saved: state.savedDataDir,
+        envOverride: null,
+        restartRequired: true,
+      }
+    },
     'config.set': (params) => {
       const payload = requireObject(params)
       let provided = false
@@ -420,6 +476,9 @@ export function createMockHost(): HostClient {
       return { ok: true }
     },
     'service.start': () => {
+      if (!state.installed) {
+        fail('unavailable', '服务未安装')
+      }
       if (state.starting) {
         fail('unavailable', '服务操作正在进行，请稍候')
       }
@@ -475,7 +534,9 @@ export function createMockHost(): HostClient {
           truncated = true
         }
       }
-      const lines = state.logs.slice(-tail)
+      // 未安装时和真后端一样直接给空数组：journal 里可能残留上次安装的旧记录，
+      // 不能把它们当成「最近日志」。
+      const lines = state.installed ? state.logs.slice(-tail) : []
       return { lines, truncated } satisfies ServiceLogsResult
     },
     'service.install': () => {

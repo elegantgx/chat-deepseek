@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
-import { ChatIcon, Paper, Sidebar, SidebarBrand, SidebarItem } from '../ui'
+import { useEffect, type ReactNode } from 'react'
+import brandUrl from '../assets/brand.svg'
+import { BrandMark, Paper, Sidebar, SidebarBrand, SidebarItem } from '../ui'
 import { NAV } from './nav'
 import type { PageId } from './nav'
 import styles from './frame.module.css'
@@ -17,12 +18,19 @@ export interface ShellProps {
 }
 
 export function Shell({ active, onNavigate, footer, children }: ShellProps) {
+  // rspack 给 asset/resource 的文件名带 contenthash，index.html 里写不出稳定地址；
+  // 挂载后把占位的 <link rel="icon"> 指到品牌标真实 URL，和侧栏用同一份 SVG。
+  useEffect(() => {
+    const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    if (icon) {
+      icon.href = brandUrl
+    }
+  }, [])
+
   return (
     <div className={styles.shell}>
       <Sidebar
-        brand={
-          <SidebarBrand name="chat-deepseek" subtitle="管理控制台" icon={<ChatIcon size={16} />} />
-        }
+        brand={<SidebarBrand name="chat-deepseek" subtitle="管理控制台" icon={<BrandMark />} />}
         footer={footer}
       >
         {NAV.map(({ id, label, Icon }) => (

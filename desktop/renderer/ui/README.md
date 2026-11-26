@@ -7,6 +7,8 @@
   `--seg-thumb-ring`），没有新增视觉决策。
 - 组件只吃 props，不做业务判断；颜色 / 字号 / 间距 / 圆角 / 阴影全部走 CSS 变量。
 - 不引第三方库；图标是内联 SVG（24 网格、1.5 描边、round cap），随 `icons.tsx` 一起发。
+- 品牌标是例外：它是 `renderer/assets/brand.svg` 文件资产，由 rspack `asset/resource` 产出，
+  侧栏、组件总览与 `index.html` 的 favicon 共用这一份，不在 `icons.tsx` 里手绘。
 - 每个组件一个 `.tsx` + 同名 `.module.css`；统一从 `./index` 导入。
 
 ## 引入
@@ -31,6 +33,7 @@ import { Button, Card, CardHeader, Field, Table, type TableColumn } from '../ui'
 | `Card` / `CardHeader` / `CardFooter`       | `grow?`、`clip?`；header 为 `title/meta/actions`，footer 为 `children/end`                                                                                                           |
 | `Table`                                    | 泛型：`columns`（`key/header/width/align/render`）、`rows`、`rowKey`、`actions?`（`header/width/render`）、`empty?`、`caption?`                                                      |
 | `Sidebar` / `SidebarBrand` / `SidebarItem` | `brand`、`children`、`footer`；item 为 `icon/label/active/onClick/disabled`                                                                                                          |
+| `BrandMark`                                | 无 props；DeepSeek 鲸鱼品牌标（20×20），`SidebarBrand` 的 `icon` 传它                                                                                                                |
 | `Paper`                                    | `children`；左上 12px 圆角 + 顶/左 1px 轮廓，高度由页面控制                                                                                                                          |
 | `Dialog`                                   | `open`、`title`、`description?`、`children?`、`actions?`、`onClose?`、`size?: 'md' \| 'sm'`、`variant?: 'overlay' \| 'contained'`                                                    |
 | `Toast`                                    | `tone: 'success' \| 'error'`、`children`；自动消失由页面负责                                                                                                                         |

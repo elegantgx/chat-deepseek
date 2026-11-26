@@ -97,6 +97,8 @@ const LIGHT_BACKGROUND = '#ffffff'
 /** 渲染层能用的 IPC 通道名，preload 里必须一致 */
 const REQUEST_CHANNEL = 'host:request'
 const EVENT_CHANNEL = 'host:event'
+/** 桌面端自己的设置文件（userData 下）；只描述主进程怎么启动 Go，不是服务端配置 */
+const DESKTOP_SETTINGS_FILE = 'desktop.json'
 
 /**
  * 冒烟模式用一次性 userData：
@@ -367,6 +369,15 @@ function registerIpc(): void {
       if (typeof method !== 'string' || method === '') {
         return { ok: false, error: { code: 'invalid_request', message: 'method 必须是非空字符串' } }
       }
+      // desktop.* 是主进程自己的设置，先于 backend 判空处理：否则后端没起来时设置页连
+      // 「当前数据目录」都读不到，而这正是排障最需要的信息。它们不转发 Go、不走 /api/v1。
+      if (method === 'desktop.dataDir' || method === 'desktop.dataDir.set') {
+        try {
+          return { ok: true, result: handleDesktopMethod(method, params) }
+        } catch (error) {
+          return { ok: false, error: toHostError(error) }
+        }
+      }
       if (!backend) {
         return { ok: false, error: { code: 'backend_unavailable', message: '后端尚未启动' } }
       }
@@ -430,6 +441,23 @@ function createWindow(): void {
           (text: unknown) => console.log('[smoke] renderer->host', String(text)),
           (error: unknown) => console.log('[smoke] renderer->host failed', String(error))
         )
+      // desktop.* 由主进程本地处理：在临时 userData 上写一次 desktop.json 再读回来，
+      // 证明冒烟能读写、且不碰真实配置目录，也不依赖 Go 子进程是否可用。
+      // 环境变量覆盖时写入按契约返回 unavailable，冒烟就只读状态，避免把预期失败当异常。
+      const smokeDataDir = path.join(app.getPath('userData'), 'smoke-data')
+      const smokeLocalRequest = activeEnvOverride()
+        ? "window.host.request('desktop.dataDir')"
+        : `window.host
+            .request('desktop.dataDir.set', { dataDir: ${JSON.stringify(smokeDataDir)} })
+            .then(() => window.host.request('desktop.dataDir'))`
+      void win.webContents
+        .executeJavaScript(
+          `${smokeLocalRequest}.then((r) => JSON.stringify(r), (e) => 'ERR:' + e.code)`
+        )
+        .then(
+          (text: unknown) => console.log('[smoke] desktop.dataDir', String(text)),
+          (error: unknown) => console.log('[smoke] desktop.dataDir failed', String(error))
+        )
       setTimeout(() => app.quit(), 800)
     })
   } else {
@@ -491,19 +519,221 @@ function createWindow(): void {
 
 /**
  * 桌面端管理的数据目录：默认是 `<userData>/data`，与 `ipc` 的 `--data-dir` 一致。
- * 用 CHAT_DEEPSEEK_DATA_DIR 可以指到别处——比如用户本来就在用 CLI 跑服务，
- * 要让桌面端管的是同一份数据，而不是一份空目录。
+ * 解析优先级：CHAT_DEEPSEEK_DATA_DIR > desktop.json 的 dataDir > `<userData>/data`。
+ * 环境变量最高：用户显式指定时桌面端不该自作主张改到别处，设置页也不允许改。
  */
 function resolveDataDir(): string {
-  const override = process.env.CHAT_DEEPSEEK_DATA_DIR
-  if (override) {
-    return path.resolve(override)
+  const envOverride = envDataDirOverride()
+  if (envOverride) {
+    return envOverride
+  }
+  const saved = readSavedDataDir()
+  if (saved !== '') {
+    return path.resolve(saved)
   }
   return path.join(app.getPath('userData'), 'data')
 }
 
+/** CHAT_DEEPSEEK_DATA_DIR 的解析后路径；没设置（含空串，和旧行为一致）时为 null */
+function envDataDirOverride(): string | null {
+  const override = process.env.CHAT_DEEPSEEK_DATA_DIR
+  return override ? path.resolve(override) : null
+}
+
+/** 每次现取 userData：冒烟模式在模块后半段才把它换成临时目录，不能缓存成常量 */
+function desktopSettingsPath(): string {
+  return path.join(app.getPath('userData'), DESKTOP_SETTINGS_FILE)
+}
+
+/**
+ * 读 desktop.json 里的 dataDir。文件不存在、JSON 坏了、字段不合法都按「未设置」处理：
+ * 这是辅助设置，不能因为它坏了让整个应用起不来（坏了只留一行 stderr，方便定位）。
+ */
+function readSavedDataDir(): string {
+  const file = desktopSettingsPath()
+  let raw: string
+  try {
+    raw = fs.readFileSync(file, 'utf8')
+  } catch (error) {
+    // 没保存过时 ENOENT 是常态，不打日志；权限、目录被占之类才需要留痕
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`[desktop] 读取设置失败 ${file}，按未设置处理：${String(error)}`)
+    }
+    return ''
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    console.warn(`[desktop] 设置文件不是合法 JSON，按未设置处理：${file}`)
+    return ''
+  }
+  const saved =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { dataDir?: unknown }).dataDir
+      : undefined
+  if (typeof saved !== 'string' || saved.trim() === '') {
+    console.warn(`[desktop] 设置文件里的 dataDir 不是非空字符串，按未设置处理：${file}`)
+    return ''
+  }
+  return saved
+}
+
+/** 原子写 desktop.json：同目录临时文件 + rename，进程中断也不会留下半截 JSON */
+function writeSavedDataDir(dataDir: string): void {
+  const file = desktopSettingsPath()
+  const dir = path.dirname(file)
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+  } catch (error) {
+    const failure: HostErrorPayload = {
+      code: 'internal',
+      message: `无法创建设置目录 ${dir}：${String(error)}`,
+    }
+    throw failure
+  }
+  const temp = `${file}.${process.pid}.tmp`
+  try {
+    fs.writeFileSync(temp, `${JSON.stringify({ dataDir }, null, 2)}\n`, 'utf8')
+    fs.renameSync(temp, file)
+  } catch (error) {
+    try {
+      fs.rmSync(temp, { force: true })
+    } catch {
+      // 临时文件清不掉不影响报错；下次保存在同一路径覆盖
+    }
+    const failure: HostErrorPayload = {
+      code: 'internal',
+      message: `写入设置失败 ${file}：${String(error)}`,
+    }
+    throw failure
+  }
+}
+
+/**
+ * 目标数据目录本次不创建（下一次启动 Go 侧会建），但父目录不可写时保存必然无效，
+ * 现在就报出具体路径，别让用户重启后才发现起不来。
+ */
+function assertDataDirParentWritable(dataDir: string): void {
+  if (fs.existsSync(dataDir)) {
+    return
+  }
+  const parent = path.dirname(dataDir)
+  try {
+    // 父路径存在但其实是文件时 access(W_OK) 也会过，必须确认它是目录
+    if (!fs.statSync(parent).isDirectory()) {
+      throw new Error('not a directory')
+    }
+    fs.accessSync(parent, fs.constants.W_OK)
+  } catch {
+    const failure: HostErrorPayload = {
+      code: 'internal',
+      message: `数据目录的父目录不可写：${parent}`,
+    }
+    throw failure
+  }
+}
+
+/** 校验 desktop.dataDir.set 的 params；不合法就抛 HostErrorPayload，外层 toHostError 原样收敛 */
+function readDataDirInput(params: unknown): string {
+  const value =
+    typeof params === 'object' && params !== null
+      ? (params as { dataDir?: unknown }).dataDir
+      : undefined
+  if (typeof value !== 'string' || value.trim() === '') {
+    const failure: HostErrorPayload = { code: 'bad_request', message: 'dataDir 必须是非空字符串' }
+    throw failure
+  }
+  const input = value.trim()
+  if (!path.isAbsolute(input)) {
+    const failure: HostErrorPayload = { code: 'bad_request', message: 'dataDir 必须是绝对路径' }
+    throw failure
+  }
+  // 存规范化路径：`~/x` 由渲染层展开，这里只负责去掉 `..` 和重复分隔符
+  return path.resolve(input)
+}
+
+/**
+ * desktop.dataDir / desktop.dataDir.set 的响应。
+ * current 是本次启动真正传给 Go 的目录，保存新值不会改它，所以 restartRequired 才能提示重启。
+ */
+type DataDirState = {
+  current: string
+  saved: string
+  envOverride: string | null
+  restartRequired: boolean
+}
+
+/** 本次启动解析出的数据目录；bootstrap 时固定一次，之后保存设置不重新解析 */
+type DataDirSnapshot = { current: string; envOverride: string | null }
+
+let dataDirSnapshot: DataDirSnapshot | null = null
+
+/** 本次启动的环境变量覆盖值；snapshot 还没建好时直接看进程环境 */
+function activeEnvOverride(): string | null {
+  return dataDirSnapshot?.envOverride ?? envDataDirOverride()
+}
+
+function dataDirState(saved: string): DataDirState {
+  const snapshot = dataDirSnapshot
+  const envOverride = activeEnvOverride()
+  const current = snapshot?.current ?? resolveDataDir()
+  return {
+    current,
+    saved,
+    envOverride,
+    // 路径写法不同（末尾斜杠、..）不算变更，按解析后的真实路径比较
+    restartRequired: saved !== '' && path.resolve(saved) !== current,
+  }
+}
+
+function setDataDir(params: unknown): DataDirState {
+  const target = readDataDirInput(params)
+  // 环境变量优先于 desktop.json：写了也不会生效，还会让界面显示与启动参数对不上
+  if (activeEnvOverride()) {
+    const failure: HostErrorPayload = {
+      code: 'unavailable',
+      message: '环境变量 CHAT_DEEPSEEK_DATA_DIR 已覆盖数据目录',
+    }
+    throw failure
+  }
+  assertDataDirParentWritable(target)
+  writeSavedDataDir(target)
+  console.log(`[desktop] 数据目录已保存为 ${target}，重启应用后生效`)
+  return dataDirState(target)
+}
+
+/** 两个本地方法的入口；registerIpc 已按 method 白名单筛过，这里不再判断其它值 */
+function handleDesktopMethod(method: string, params: unknown): DataDirState {
+  if (method === 'desktop.dataDir.set') {
+    return setDataDir(params)
+  }
+  return dataDirState(readSavedDataDir())
+}
+
+/** 只排障时多读一次设置文件；正常启动不为了 trace 参数白读一遍 desktop.json */
+function traceDataDir(): void {
+  const snapshot = dataDirSnapshot
+  if (!debugLifecycle || !snapshot) {
+    return
+  }
+  trace(
+    'data-dir',
+    `current=${snapshot.current}`,
+    `saved=${readSavedDataDir() || '(未设置)'}`,
+    `envOverride=${snapshot.envOverride ?? '(未设置)'}`
+  )
+}
+
 function bootstrap(): void {
-  backend = new BackendProcess(sendToRenderer, resolveDataDir())
+  // 本次启动用哪个目录只在这里算一次：保存 desktop.json 后重启才重新解析
+  const snapshot: DataDirSnapshot = {
+    current: resolveDataDir(),
+    envOverride: envDataDirOverride(),
+  }
+  dataDirSnapshot = snapshot
+  traceDataDir()
+  backend = new BackendProcess(sendToRenderer, snapshot.current)
   backend.start()
   registerIpc()
   createWindow()

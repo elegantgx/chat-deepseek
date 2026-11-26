@@ -1,0 +1,10 @@
+/* 28px 的品牌容器里留 4px 内边距，鲸鱼刚好填满又不顶到圆角。
+   矢量 + 整像素尺寸，2x 下轮廓不会糊；不额外加 filter/描边。 */
+.mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}

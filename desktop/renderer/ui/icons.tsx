@@ -28,16 +28,6 @@ function IconBase({ size = 24, children, ...rest }: IconProps & { children: Reac
   )
 }
 
-/** 品牌标：一个圆角气泡 + 三个点，和视觉稿的 chat 标一致 */
-export function ChatIcon(props: IconProps) {
-  return (
-    <IconBase {...props}>
-      <path d="M20.5 12.2c0 4-3.8 7.2-8.5 7.2-1 0-2-.14-2.9-.4L4.5 20.5l1.3-3.6C4.6 15.6 3.5 14 3.5 12.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2Z" />
-      <path d="M8.6 12.2h.01M12 12.2h.01M15.4 12.2h.01" />
-    </IconBase>
-  )
-}
-
 export function ServerIcon(props: IconProps) {
   return (
     <IconBase {...props}>

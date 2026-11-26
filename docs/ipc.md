@@ -94,20 +94,27 @@ chat-deepseek ipc [--data-dir <dir>]
 
 探测配置里的监听地址，返回版本、数据目录和服务状态。不需要参数，不读数据库、不写文件。
 
-| 字段             | 类型                                      | 可空 | 说明                                 |
-| ---------------- | ----------------------------------------- | ---- | ------------------------------------ |
-| `version`        | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`   |
-| `dataDir`        | string                                    | 否   | 数据目录绝对路径                     |
-| `service`        | object                                    | 否   | 服务探测结果                         |
-| `service.state`  | `"running"` \| `"stopped"` \| `"unknown"` | 否   | 见下                                 |
-| `service.listen` | string                                    | 否   | `config.json` 里的监听地址（未改动） |
-| `service.source` | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测            |
+| 字段                | 类型                                      | 可空 | 说明                                                 |
+| ------------------- | ----------------------------------------- | ---- | ---------------------------------------------------- |
+| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                   |
+| `dataDir`           | string                                    | 否   | 数据目录绝对路径                                     |
+| `service`           | object                                    | 否   | 服务探测结果                                         |
+| `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                   |
+| `service.listen`    | string                                    | 否   | `config.json` 里的监听地址（未改动）                 |
+| `service.source`    | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测                            |
+| `service.installed` | bool                                      | 否   | systemd 用户单元是否已安装；不可用平台恒为 `false`   |
+| `service.supported` | bool                                      | 否   | 当前平台是否有可用的 systemd 用户管理器              |
 
 `state` 语义：
 
 - `running`：300ms 内 TCP 连接配置的监听地址成功；
 - `stopped`：地址可解析，但连接失败（拒绝、超时、不可达）；
 - `unknown`：探测本身无法进行（监听地址格式非法、DNS 解析失败等）；不会凭 PID 或 systemd 猜测。
+
+`installed`/`supported` 与 `state` 正交：TCP 探测只能说明端口通不通，分不出「单元没装」和
+「装了但没启动」。桌面端据 `supported=false` 显示「当前平台不支持」，据 `supported && !installed`
+显示「未安装」并给安装入口。安装状态读取失败（权限、`systemctl` 异常）不会让 `system.status`
+报错：`installed` 保守返回 `false`，`supported` 退回平台能力判断，原因只写 stderr。
 
 通配地址会探测回环：`0.0.0.0` → `127.0.0.1`，`::` → `::1`，空主机名 → `127.0.0.1`。
 
@@ -120,7 +127,13 @@ chat-deepseek ipc [--data-dir <dir>]
   "result": {
     "version": "0.1.4-official0.1.4",
     "dataDir": "/home/<user>/chat-deepseek/data",
-    "service": { "state": "running", "listen": "127.0.0.1:8091", "source": "probe" }
+    "service": {
+      "state": "running",
+      "listen": "127.0.0.1:8091",
+      "source": "probe",
+      "installed": true,
+      "supported": true
+    }
   }
 }
 ```
@@ -426,9 +439,18 @@ service.uninstall
 | `lines`     | string[] | 否   | 最近的日志行，从旧到新；没有日志时为 `[]` 不是 `null` |
 | `truncated` | bool     | 否   | `tail` 超过 `5000` 被截断时为 `true`，否则 `false`    |
 
-- `journalctl` 不可用（非 Linux、未安装、无法连接用户 journal）时返回 `unavailable`，不会伪造空日志。
+每行格式固定为 `HH:MM:SS LEVEL message`，渲染层可直接解析：
+
+- 时间取 journal 的 `__REALTIME_TIMESTAMP`（微秒）并转成本地时区，不再由客户端补“当前时刻”；
+- `LEVEL` 由 syslog `PRIORITY` 映射：`0`–`3` → `ERROR`，`4` → `WARN`，其余（含缺失）→ `INFO`；
+- `message` 中的换行/空行折叠成 ` / `，保证一行一条、不出现空行。
+
+- **单元未安装时直接返回 `{ "lines": [], "truncated": false }`**，不读 journal 残留、也不开启事件跟随；
+  `tail` 超上限时仍按规则返回 `truncated`。平台不支持 systemd 时 `installed` 恒为 `false`，
+  因此同样得到空数组，页面据此显示「当前平台没有 systemd 用户单元」。
+- `journalctl` 不可用（已安装但找不到命令、无法连接用户 journal）时返回 `unavailable`，不会伪造空日志。
 - 如果探测到服务正在运行，本方法会顺带开启 `event.service.log` 跟随；`service.start`/`service.restart`
-  成功后也会开启。停止服务或 IPC 退出时跟随自动结束。
+  成功后也会开启。停止服务或 IPC 退出时跟随自动结束。跟随只对已安装的 unit 生效。
 - 读取是快照；实时追加走事件，不要轮询 `service.logs` 做 tail。
 
 示例：
@@ -437,7 +459,13 @@ service.uninstall
 {
   "jsonrpc": "2.0",
   "id": 11,
-  "result": { "lines": ["chat-deepseek 正在监听 127.0.0.1:8091", "... "], "truncated": false }
+  "result": {
+    "lines": [
+      "09:41:02 INFO serve listening on 127.0.0.1:8091",
+      "09:41:05 WARN backup skipped: wal file present"
+    ],
+    "truncated": false
+  }
 }
 ```
 

@@ -3,11 +3,11 @@ import type { ReactNode } from 'react'
 import {
   ArchiveIcon,
   Badge,
+  BrandMark,
   Button,
   Card,
   CardFooter,
   CardHeader,
-  ChatIcon,
   DatabaseIcon,
   Dialog,
   EmptyState,
@@ -242,7 +242,7 @@ export function GalleryApp() {
       <div className={styles.noise} aria-hidden="true" />
       <div className={styles.window}>
         <Sidebar
-          brand={<SidebarBrand name="chat-deepseek" subtitle="管理控制台" icon={<ChatIcon />} />}
+          brand={<SidebarBrand name="chat-deepseek" subtitle="管理控制台" icon={<BrandMark />} />}
           footer={
             <>
               <div className={styles.conn}>

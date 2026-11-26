@@ -71,10 +71,12 @@ pnpm desktop:check   # 渲染层类型检查
 只读家目录，用它们启动会失败），也不加 `--no-sandbox`。
 
 `--smoke`（或 `CHAT_DEEPSEEK_SMOKE=1`）**不会在屏幕上弹窗**：窗口始终 `show: false`，永远不调 `show()`。
-它等渲染层 `did-finish-load` 后打印 `[smoke] renderer loaded (window hidden)`，然后走两条链路各打一次真实请求：
+它等渲染层 `did-finish-load` 后打印 `[smoke] renderer loaded (window hidden)`，然后走两条链路各打一次真实请求，
+并额外验证一次本地方法：
 
 - 主进程直连 Go 后端：`system.capabilities`；
-- 渲染层 ↔ preload ↔ ipcMain：`window.host.request('system.status')`。
+- 渲染层 ↔ preload ↔ ipcMain：`window.host.request('system.status')`；
+- 本地方法（不经过 Go）：在临时 userData 里写一次 `desktop.json`，再读回 `desktop.dataDir`。
 
 800ms 后自动退出；4.5s 内渲染层没加载完会打日志并以退出码 1 结束。冒烟还会用 `mkdtemp` 建一个
 临时 userData（`app.setPath('userData', …)`），**不碰真实配置目录**，也因为单实例锁文件在 userData 里，
@@ -123,6 +125,7 @@ window.host = {
   （类型 `HostErrorPayload`）。不要指望它是 `Error` 实例：`Error` 跨 `contextBridge` 会被重建，
   自定义字段（`code`）会丢，所以这里刻意 reject 普通对象；判断分支只看 `code`，`message` 仅用于展示。
 - `onEvent` 返回取消订阅函数，重复调用安全；`useEffect` 清理时必须调用。
+- `desktop.*`（数据目录读写）是**主进程本地方法**，不转发 Go；契约见「数据目录与本地设置」。
 - 纯浏览器里直接开渲染层（没有 preload）时 `window.host` 是 `undefined`，页面要容忍。
 - 类型定义在 `desktop/ipc.d.ts`，`tsconfig.json` 已 include，渲染层可直接用 `window.host`。
 
@@ -137,8 +140,9 @@ window.host = {
 
 - 启动：`<CHAT_DEEPSEEK_BIN 或 $PWD/chat-deepseek> ipc --data-dir <数据目录>`，stdio 三根管道都接管。
 - 数据目录：默认 `<userData>/data`（Linux `~/.config/chat-deepseek/data`，macOS
-  `~/Library/Application Support/chat-deepseek/data`）。用 `CHAT_DEEPSEEK_DATA_DIR` 可以指到别处——
-  用户本来就在用 CLI 跑服务时，要让桌面端管同一份 `data/`，否则看到的是一个空控制台。
+  `~/Library/Application Support/chat-deepseek/data`）。解析优先级、`desktop.json` 和设置页用的
+  `desktop.*` 方法见下一节；`CHAT_DEEPSEEK_DATA_DIR` 仍然最高，适合「本来就在用 CLI 跑服务，
+  要让桌面端管同一份 `data/`」的场景。
 - 协议：NDJSON，一行一个 JSON，信封是 JSON-RPC 2.0 形状。主进程**只按 `id` 配对转发，不解析业务字段**。
 - 请求：`{"jsonrpc":"2.0","id":1,"method":"system.status","params":{}}`
 - 响应：`{"jsonrpc":"2.0","id":1,"result":{...}}`
@@ -160,6 +164,54 @@ window.host = {
 | `invalid_request`     | 传给 `request()` 的 method 不是非空字符串                                         |
 | `backend_error`       | Go 的 error 缺 `code` 或形状不对                                                  |
 | 其它字符串            | Go 的 `error.code` 原样透传，如 `bad_request` / `not_found` / `permission_denied` |
+
+## 数据目录与本地设置
+
+桌面端启动 Go 后端时传的 `--data-dir` 按下面的优先级解析，先命中者生效：
+
+1. `CHAT_DEEPSEEK_DATA_DIR` 环境变量（非空即覆盖，最高优先）；
+2. `<userData>/desktop.json` 里的 `dataDir`（设置页保存的值）；
+3. `<userData>/data`（默认）。
+
+`<userData>` 来自 `app.getPath('userData')`（`app.setName('chat-deepseek')` 之后是
+`~/.config/chat-deepseek`，macOS 为 `~/Library/Application Support/chat-deepseek`）。
+`desktop.json` 只存桌面端自己的设置，当前只有一个字段：
+
+```json
+{ "dataDir": "/absolute/path/to/data" }
+```
+
+读取是容错的：文件不存在、JSON 坏了、`dataDir` 不是非空字符串，都按「未设置」处理（只在 stderr
+留一行日志），继续回落到 `<userData>/data`，不会影响启动。写入用「同目录临时文件 + `rename`」保证
+内容完整；设置目录不存在时先 `mkdirSync(..., { recursive: true })`。`--smoke` 使用临时 userData，
+`desktop.json` 也跟着落在临时目录，不碰真实配置目录。
+
+### 本地方法 `desktop.dataDir` / `desktop.dataDir.set`
+
+这两个方法由**主进程本地处理**：不转发给 Go、不走 `/api/v1`，后端没启动（`backend === null`）时也
+照常返回。它们和其它方法共用 `window.host.request` 通道，preload 不需要新接口。
+
+```ts
+// 读状态：无参数
+await window.host.request('desktop.dataDir')
+// {
+//   current: '/home/<user>/.config/chat-deepseek/data', // 本次启动实际使用
+//   saved: '',                                         // desktop.json 里的值，未设置为 ''
+//   envOverride: null,                                 // CHAT_DEEPSEEK_DATA_DIR 解析后的路径
+//   restartRequired: false,
+// }
+
+// 保存：必须是绝对路径；返回同形状，restartRequired 按新值计算
+await window.host.request('desktop.dataDir.set', { dataDir: '/srv/chat-deepseek/data' })
+```
+
+- `current` 是**本次启动**真正传给 Go 的目录。保存只写 `desktop.json`，**重启应用后才生效**；
+  `restartRequired = saved !== '' && resolve(saved) !== current`。
+- 校验失败返回 `bad_request`（`dataDir 必须是非空字符串` / `dataDir 必须是绝对路径`）；环境变量
+  已设置时返回 `unavailable`，界面不允许改，也不会写文件；写入失败或数据目录的父目录不可写返回
+  `internal`（message 指出具体路径），不会假装保存成功。
+- 保存时用 `path.resolve` 规范化；目标数据目录本次不创建（下次启动由 Go 侧创建），但会预检父目录。
+- 成功写入后主进程打一行：`[desktop] 数据目录已保存为 …，重启应用后生效`。
 
 ## 安全与窗口（固定配置，改之前先对齐）
 

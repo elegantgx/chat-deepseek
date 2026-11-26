@@ -2,6 +2,9 @@
 
 const WHITESPACE = /\s/
 
+/** POSIX 的 `/...`，以及 Windows 的 `C:\...` / `C:/...`；这里只做形状判断。 */
+const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/])/
+
 function validatePort(text: string): string | undefined {
   if (!/^\d+$/.test(text)) {
     return '端口需为 1–65535 的整数'
@@ -81,8 +84,23 @@ export function validateBackupDir(value: string): string | undefined {
   if (!trimmed) {
     return undefined
   }
-  if (!/^(?:\/|[A-Za-z]:[\\/])/.test(trimmed)) {
+  if (!ABSOLUTE_PATH.test(trimmed)) {
     return '备份目录需要绝对路径，留空使用默认目录'
+  }
+  return undefined
+}
+
+/**
+ * 数据目录是主进程的启动参数，必须是绝对路径（`~` 也由主进程按字面拒绝）。
+ * 这里只做前端形状检查，父目录是否可写由 `desktop.dataDir.set` 返回。
+ */
+export function validateDataDir(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return '数据目录不能为空，必须是绝对路径'
+  }
+  if (!ABSOLUTE_PATH.test(trimmed)) {
+    return '数据目录必须是绝对路径，例如 /home/<user>/chat-deepseek/data'
   }
   return undefined
 }

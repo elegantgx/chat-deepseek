@@ -8,6 +8,9 @@ import './global.css'
 export { Badge } from './Badge'
 export type { BadgeProps } from './Badge'
 
+/* 品牌标是文件资产（renderer/assets/brand.svg），不是内联图标 */
+export { BrandMark } from './BrandMark'
+
 export { Button } from './Button'
 export type { ButtonProps, ButtonSize, ButtonTone } from './Button'
 
@@ -54,7 +57,6 @@ export type { ToggleProps } from './Toggle'
 export {
   AlertTriangleIcon,
   ArchiveIcon,
-  ChatIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronRightIcon,

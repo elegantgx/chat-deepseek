@@ -76,7 +76,8 @@
 }
 
 /* 错误行自带上下留白，紧跟其后的第一行不再重复画分隔线 */
-.loadError + .fieldRow.fieldRow {
+.loadError + .fieldRow.fieldRow,
+.loadError + .settingRow {
   border-top: 0;
 }
 
@@ -125,10 +126,11 @@
 }
 
 .note {
+  max-width: 260px;
   font-size: var(--fs-11);
   line-height: var(--lh-11);
   color: var(--text-3);
-  white-space: nowrap;
+  text-align: right;
 }
 
 .monoValue {
@@ -139,6 +141,42 @@
   line-height: var(--lh-12);
   color: var(--text-2);
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* 数据目录的说明在行下方整行排；保存后未重启时把「待生效」提到最前。 */
+.dataDirNotes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-20) var(--sp-12);
+}
+
+.dataDirNote {
+  margin: 0;
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}
+
+.dataDirWarn {
+  color: var(--warning-ink);
+}
+
+/* 主进程的 desktop.dataDir 读不到时，单独给原因 + 重试，不把空路径画成有效目录。 */
+.dataDirLoadError {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: 0 var(--sp-20) var(--sp-12);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--danger-ink);
+}
+
+.dataDirErrorText {
+  min-width: 0;
+  flex: 1;
   overflow-wrap: anywhere;
 }
 

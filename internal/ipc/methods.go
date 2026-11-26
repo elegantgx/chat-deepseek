@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"context"
 	"encoding/json"
 	"runtime"
 	"time"
@@ -52,6 +53,10 @@ type serviceInfo struct {
 	State  string `json:"state"`
 	Listen string `json:"listen"`
 	Source string `json:"source"`
+	// Installed/Supported 来自 systemd 管理器的 Status，而不是 TCP 探测：
+	// 探测只能说明端口通不通，分不出「没装」和「装了但停了」。
+	Installed bool `json:"installed"`
+	Supported bool `json:"supported"`
 }
 
 type statusResult struct {
@@ -101,13 +106,31 @@ func (s *Server) systemStatus() (any, *rpcError) {
 	if err != nil {
 		return nil, internalError("读取配置失败", err)
 	}
+	// 安装状态每次都按需构造 controller 读取，不把它挂到 Server 上：
+	// system.status 只是投影，不应该为一次读状态引入长生命周期依赖。
+	// Status 内部只有 os.Stat 和少量 systemctl 查询，超时兜底避免 GUI 启动被拖慢。
+	controller := s.newService()
+	statusCtx, statusCancel := context.WithTimeout(context.Background(), serviceStatusTimeout)
+	defer statusCancel()
+	status, statusErr := controller.Status(statusCtx)
+	supported := status.Supported
+	installed := status.Installed
+	if statusErr != nil {
+		// 状态读取失败不能影响 TCP 探测本身，也不能让 system.status 报错；
+		// 平台能力退回 SupportError 判断，安装状态按「未安装」保守处理，细节写 stderr。
+		s.logf("读取服务安装状态失败: %v", statusErr)
+		supported = controller.SupportError() == nil
+		installed = false
+	}
 	return statusResult{
 		Version: s.version,
 		DataDir: s.dataDir,
 		Service: serviceInfo{
-			State:  probeServiceState(cfg.Listen, s.probeTimeout),
-			Listen: cfg.Listen,
-			Source: "probe",
+			State:     probeServiceState(cfg.Listen, s.probeTimeout),
+			Listen:    cfg.Listen,
+			Source:    "probe",
+			Installed: installed,
+			Supported: supported,
 		},
 	}, nil
 }

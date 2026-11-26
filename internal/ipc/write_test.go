@@ -42,6 +42,10 @@ type fakeServiceController struct {
 	installResult service.InstallResult
 	lastInstall   service.InstallOptions
 	uninstallDone bool
+
+	status      service.Status
+	statusErr   error
+	statusCalls int
 }
 
 func (f *fakeServiceController) Start(context.Context) error {
@@ -73,6 +77,13 @@ func (f *fakeServiceController) Restart(context.Context) error {
 
 func (f *fakeServiceController) MainPID(context.Context) (int, error) {
 	return f.pid, nil
+}
+
+func (f *fakeServiceController) Status(context.Context) (service.Status, error) {
+	f.mu.Lock()
+	f.statusCalls++
+	f.mu.Unlock()
+	return f.status, f.statusErr
 }
 
 func (f *fakeServiceController) SupportError() error {
@@ -107,6 +118,14 @@ func useFakeService(server *Server, fake serviceController) {
 	server.newService = func() serviceController { return fake }
 	// 服务方法测试不依赖本机 journald；跟随源用空实现。
 	server.newLogTailer = func() (logTailer, error) { return &fakeLogTailer{}, nil }
+}
+
+// useInstalledService 让 service.logs 通过「已安装」检查，避免测试受本机 unit 状态影响；
+// 只替换 controller，日志源仍由各用例自己注入。
+func useInstalledService(server *Server) *fakeServiceController {
+	fake := &fakeServiceController{status: service.Status{Supported: true, Installed: true}}
+	server.newService = func() serviceController { return fake }
+	return fake
 }
 
 func writeDatabase(t *testing.T, dir, content string) {
@@ -528,6 +547,7 @@ func (f *fakeLogTailer) Follow(ctx context.Context, emit func(string, string)) e
 
 func TestServiceLogsReadsTail(t *testing.T) {
 	server, _ := newTestServer(t, "127.0.0.1:1")
+	useInstalledService(server)
 	tailer := &fakeLogTailer{lines: []string{"first", "second", "third"}}
 	server.newLogTailer = func() (logTailer, error) { return tailer, nil }
 
@@ -562,6 +582,7 @@ func TestServiceLogsRejectsBadTail(t *testing.T) {
 
 func TestServiceLogsClampsHugeTail(t *testing.T) {
 	server, _ := newTestServer(t, "127.0.0.1:1")
+	useInstalledService(server)
 	tailer := &fakeLogTailer{lines: []string{"only"}}
 	server.newLogTailer = func() (logTailer, error) { return tailer, nil }
 
@@ -579,6 +600,7 @@ func TestServiceLogsClampsHugeTail(t *testing.T) {
 
 func TestServiceLogsUnavailableWithoutSource(t *testing.T) {
 	server, _ := newTestServer(t, "127.0.0.1:1")
+	useInstalledService(server)
 	server.newLogTailer = func() (logTailer, error) {
 		return nil, errors.New("当前环境没有可用的服务日志：找不到 journalctl")
 	}
@@ -729,6 +751,7 @@ func (w *channelWriter) Write(data []byte) (int, error) {
 func TestServeEmitsServiceLogEventWithoutInterleaving(t *testing.T) {
 	listener := liveListener(t)
 	server, _ := newTestServer(t, listener.Addr().String())
+	useInstalledService(server)
 	tailer := &fakeLogTailer{follow: func(ctx context.Context, emit func(string, string)) error {
 		emit("live line", "stdout")
 		<-ctx.Done()
