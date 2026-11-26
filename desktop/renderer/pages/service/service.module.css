@@ -1,0 +1,104 @@
+/* 服务页：状态卡固定在顶部，日志卡吃掉剩余高度（页面不再出现纸面空档）。 */
+
+.statusCard {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-32);
+  height: 136px;
+  padding: 0 var(--sp-20);
+}
+
+.statusMain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 240px;
+}
+
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+/* 01 的焦点就是这行大字：8px 圆点 + 22/600，胶囊留给别的场景 */
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dotRunning {
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-soft);
+}
+
+.dotStopped {
+  background: var(--text-3);
+  box-shadow: 0 0 0 4px var(--hover);
+}
+
+.statusWord {
+  font-size: var(--fs-22);
+  line-height: var(--lh-22);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+}
+
+.statusSub {
+  /* 让说明文字与状态字对齐（圆点 8 + 间距 8） */
+  padding-left: var(--sp-16);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--text-3);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  flex: none;
+  width: 264px;
+  margin: 0 0 0 auto;
+  padding-left: var(--sp-28);
+  border-left: 1px solid var(--line);
+}
+
+.metaRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-24);
+}
+
+.metaLabel {
+  flex: none;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-3);
+}
+
+.metaValue {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.logArea {
+  flex: 1;
+  min-height: 0;
+}
