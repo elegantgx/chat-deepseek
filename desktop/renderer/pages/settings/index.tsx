@@ -167,8 +167,12 @@ export function SettingsPage() {
   const [serviceTask, setServiceTask] = useState<ServiceTask | null>(null)
   const [uninstallOpen, setUninstallOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
+  /** 滚动条只在翻页时出现，见 settings.module.css 的 .scrolling */
+  const [scrolling, setScrolling] = useState(false)
   /** state 要下次渲染才生效，双击时用 ref 挡住第二个写请求 */
   const writeInFlight = useRef(false)
+  /** 滚动停止计时器：连续滚动时不断后推，停稳 800ms 后才淡出 */
+  const scrollEndTimer = useRef<number | null>(null)
 
   // config.get 回来后才允许编辑：加载中与读取失败时表单保持空值 + 禁用。
   useEffect(() => {
@@ -200,6 +204,15 @@ export function SettingsPage() {
     return () => window.clearTimeout(id)
   }, [toast])
 
+  // 页面卸载时停掉淡出计时器，避免 setState 落到已卸载的组件上
+  useEffect(() => {
+    return () => {
+      if (scrollEndTimer.current !== null) {
+        window.clearTimeout(scrollEndTimer.current)
+      }
+    }
+  }, [])
+
   const ready = baseline !== null
   const listenError = ready ? validateListen(draft.listen) : undefined
   const backupError = ready ? validateBackupDir(draft.backupDir) : undefined
@@ -228,42 +241,50 @@ export function SettingsPage() {
   const saveDisabled = !ready || busy || configState.loading || !dirty || hasErrors
 
   const service = systemStatus?.service
-  // 字段缺席只可能是旧后端；按「已安装、平台支持」降级，保持页面可用。
-  const serviceSupported = service?.supported !== false
-  const serviceInstalled = service?.installed !== false
-  const serviceStatus: StatusKind = !serviceSupported
-    ? 'error'
-    : !serviceInstalled
+  // 本地运行不需要 unit：状态 pill 只看 TCP 探测结果，不再用 installed 推「未安装」。
+  const serviceState = service?.state
+  const serviceStatus: StatusKind =
+    systemStatus === null
       ? 'stopped'
-      : service?.state === 'running'
+      : serviceState === 'running'
         ? 'running'
-        : service?.state === 'unknown'
-          ? 'error'
-          : 'stopped'
+        : serviceState === 'stopped'
+          ? 'stopped'
+          : 'error'
   const serviceStatusLabel =
     systemStatus === null
       ? statusError === null
         ? '读取中…'
         : '状态不可用'
-      : !serviceSupported
-        ? '当前平台不支持'
-        : !serviceInstalled
-          ? '未安装'
-          : service?.state === 'running'
-            ? '运行中'
-            : service?.state === 'unknown'
-              ? '状态未知'
-              : '已停止'
+      : serviceState === 'running'
+        ? '运行中'
+        : serviceState === 'stopped'
+          ? '已停止'
+          : '状态未知'
+  // mode 与 state 正交：它回答「谁来托管」，不代表跑没跑（none 才是真没在跑）。
+  const serviceMode = service?.mode
+  const serviceModeLabel =
+    serviceMode === 'process'
+      ? '桌面端本地进程'
+      : serviceMode === 'systemd'
+        ? 'systemd 用户单元'
+        : serviceMode === 'none'
+          ? '未运行'
+          : '—'
+  // 字段缺席只可能是旧后端：按「已安装、平台支持」降级，避免把老数据当成未安装。
+  const serviceSupported = service?.supported !== false
+  const serviceInstalled = service?.installed !== false
+  // 状态还没回来时不知道 unit 装没装，不能先给「安装」或「重新安装」。
+  const serviceReady = systemStatus !== null
+  // 安装单元只是可选的「开机自启 + 脱离桌面端」，本地进程模式本来就不需要它。
   const serviceFooter =
     statusError !== null
       ? '无法读取服务状态'
       : systemStatus === null
         ? '正在读取服务状态…'
-        : !serviceSupported
-          ? '当前平台没有 systemd 用户单元'
-          : !serviceInstalled
-            ? '服务尚未安装'
-            : '由 systemd 用户单元管理'
+        : serviceInstalled
+          ? '由 systemd 用户单元管理'
+          : '以桌面端本地进程运行，不需要 systemd；安装单元后由 systemd 管理并支持开机自启'
   const installTask: ServiceTask = serviceInstalled ? 'reinstall' : 'install'
   const installLabel =
     serviceTask === installTask
@@ -272,7 +293,7 @@ export function SettingsPage() {
         : '安装中…'
       : serviceInstalled
         ? '重新安装'
-        : '安装服务'
+        : '安装为系统服务（开机自启）'
 
   const loadingPlaceholder = configError === null ? '正在读取配置…' : '读取配置失败'
   const dataDirPlaceholder =
@@ -291,6 +312,19 @@ export function SettingsPage() {
 
   function notify(tone: ToastTone, message: string) {
     setToast({ tone, message })
+  }
+
+  /** 滚动中给容器挂 .scrolling；计时器只在第一次滚动时创建，之后每次事件后推结束时间。 */
+  function handleScroll() {
+    if (scrollEndTimer.current === null) {
+      setScrolling(true)
+    } else {
+      window.clearTimeout(scrollEndTimer.current)
+    }
+    scrollEndTimer.current = window.setTimeout(() => {
+      scrollEndTimer.current = null
+      setScrolling(false)
+    }, 800)
   }
 
   function handleConnectionMode(mode: ConnectionMode) {
@@ -373,7 +407,11 @@ export function SettingsPage() {
   }
 
   async function handleServiceTask(task: ServiceTask) {
-    if (writeInFlight.current || serviceTask !== null || !serviceSupported) {
+    if (writeInFlight.current || serviceTask !== null || !serviceReady) {
+      return
+    }
+    // 卸载只删 unit，不需要 platform 能力；安装/重装必须有 systemd。
+    if (task !== 'uninstall' && !serviceSupported) {
       return
     }
     writeInFlight.current = true
@@ -418,7 +456,10 @@ export function SettingsPage() {
         }
       />
       <PageBody>
-        <div className={styles.settings}>
+        <div
+          className={scrolling ? `${styles.settings} ${styles.scrolling}` : styles.settings}
+          onScroll={handleScroll}
+        >
           <section className={styles.group}>
             <h2 className={styles.groupLabel}>连接</h2>
             <Card>
@@ -549,8 +590,19 @@ export function SettingsPage() {
               </div>
               <div className={styles.settingRow}>
                 <span className={styles.settingLabel}>管理方式</span>
-                <span className={styles.monoValue}>systemd 用户单元</span>
+                <span className={styles.modeValue}>{serviceModeLabel}</span>
               </div>
+              {/* 已经装了 systemd 单元时，这行说明与当前管理方式无关，收起来避免自相矛盾 */}
+              {serviceInstalled ? null : (
+                <p className={styles.serviceNote}>
+                  不安装 systemd 也能启动服务；安装单元只是让它开机自启、脱离桌面端运行。
+                </p>
+              )}
+              {serviceSupported ? null : (
+                <p className={`${styles.serviceNote} ${styles.serviceWarn}`}>
+                  当前平台没有 systemd，无法安装为系统服务；本地运行不受影响。
+                </p>
+              )}
               <CardFooter
                 end={
                   <>
@@ -559,16 +611,15 @@ export function SettingsPage() {
                       onClick={() => {
                         void handleServiceTask(installTask)
                       }}
-                      disabled={busy || !serviceSupported}
+                      disabled={busy || !serviceSupported || !serviceReady}
+                      title={
+                        serviceSupported ? undefined : '当前平台没有 systemd，无法安装为系统服务'
+                      }
                     >
                       {installLabel}
                     </Button>
-                    {serviceInstalled || !serviceSupported ? (
-                      <Button
-                        tone="danger"
-                        onClick={() => setUninstallOpen(true)}
-                        disabled={busy || !serviceSupported || !serviceInstalled}
-                      >
+                    {serviceReady && serviceInstalled ? (
+                      <Button tone="danger" onClick={() => setUninstallOpen(true)} disabled={busy}>
                         {serviceTask === 'uninstall' ? '卸载中…' : '卸载服务'}
                       </Button>
                     ) : null}
@@ -623,7 +674,7 @@ export function SettingsPage() {
             </>
           }
         >
-          <p className={styles.dialogNote}>卸载后可通过「安装服务」恢复服务。</p>
+          <p className={styles.dialogNote}>卸载后可通过「安装为系统服务（开机自启）」重新安装。</p>
         </Dialog>
       </PageBody>
     </>

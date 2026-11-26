@@ -8,14 +8,18 @@ import {
   useRequest,
 } from '../../app'
 import type { HostError } from '../../app'
-import type { ServiceLogEvent, ServiceLogsResult, SystemStatus } from '../../app/ipc-types'
+import type {
+  ServiceLogEvent,
+  ServiceLogsResult,
+  ServiceStartResult,
+  SystemStatus,
+} from '../../app/ipc-types'
 import {
   AlertTriangleIcon,
   Button,
   Card,
   CardFooter,
   CardHeader,
-  DownloadIcon,
   EmptyState,
   LogPane,
   PowerIcon,
@@ -28,8 +32,8 @@ import styles from './service.module.css'
 
 type ServiceAction = 'start' | 'stop' | 'restart'
 
-/** 安装和启停共用互斥状态：同一时间只允许一个在途写操作 */
-type ServiceBusy = ServiceAction | 'install'
+/** 启停共用互斥状态：同一时间只允许一个在途写操作 */
+type ServiceBusy = ServiceAction
 
 /** 日志快照默认取最近 200 行；界面不做轮询，增量靠事件 */
 const LOG_TAIL = 200
@@ -49,12 +53,6 @@ const LINES_LIMIT = 5000
 
 /** LogPane 的卡头 44 + 收口 40，剩余高度全部给日志区 */
 const LOG_CARD_CHROME = 44 + 40
-
-/** `service.start` / `service.restart` 的返回；`ipc-types` 在 app/ 下不能改，契约就放页面里 */
-interface ServiceStartResult {
-  readonly state: 'running' | 'starting'
-  readonly pid?: number
-}
 
 const STATE_LABEL = {
   running: '运行中',
@@ -105,27 +103,30 @@ export function ServicePage() {
   // 错误态优先于旧 data：useRequest 失败时会保留旧 data，不能拿它冒充当前状态。
   const readError = pollError ?? status.error
   const displayStatus = liveStatus ?? status.data
-  // 读失败时不要把旧 data 的安装状态拿来做按钮/文案判断。
+  // 读失败时不要把旧 data 的状态拿来做按钮/文案判断。
   const service = readError === null ? displayStatus?.service : undefined
   const baseState = service?.state
   const running = baseState === 'running'
   const stopped = baseState === 'stopped'
-  // 契约里 supported/installed 与 TCP 探测正交：探测只说明端口通不通。
-  const supported = service?.supported ?? true
-  const installed = service?.installed ?? false
-  const unsupported = service !== undefined && !service.supported
-  const uninstalled = service !== undefined && service.supported && !service.installed
+  // 主操作只看 TCP 探测结果：没装 systemd 时后端会自动起本地子进程，安装不再是前置条件。
+  const mode = service?.mode
+  // 「管理方式」说清当前是谁在托管；none 只有 stopped 才等于「未运行」，
+  // running + none 说明服务不由桌面端或 systemd 托管，保持占位不做断言。
+  const modeLabel =
+    mode === 'systemd'
+      ? 'systemd 用户单元'
+      : mode === 'process'
+        ? '桌面端本地进程'
+        : mode === 'none' && stopped
+          ? '未运行'
+          : '—'
   const ready = !starting && !status.loading && readError === null && displayStatus !== null
   const statusLabel = starting
     ? STATE_LABEL.starting
     : readError !== null
       ? '无法读取服务状态'
       : displayStatus
-        ? unsupported
-          ? '当前平台不支持'
-          : uninstalled
-            ? '未安装'
-            : STATE_LABEL[baseState ?? 'unknown']
+        ? STATE_LABEL[baseState ?? 'unknown']
         : status.loading
           ? '读取中'
           : '状态未知'
@@ -142,7 +143,8 @@ export function ServicePage() {
     setLines(logs.data.lines.map((line) => parseLogLine(line, now)))
   }, [logs.data])
 
-  // service.start/restart 返回 starting 时 systemctl 还没等到端口，轮询到探测出结果为止。
+  // service.start/restart 返回 starting 时后端只保证进程/单元已拉起，端口未必就绪；
+  // 轮询到 TCP 探测出 running/stopped 为止（本地模式与 systemd 走同一条路径）。
   useEffect(() => {
     if (!starting) {
       return
@@ -283,7 +285,7 @@ export function ServicePage() {
 
   /** 写操作一次一个：成功刷新状态与日志快照，失败完整交给 Toast，不吞错误 */
   const run = async (action: ServiceAction) => {
-    if (busy !== null || starting || !ready || !supported || !installed) {
+    if (busy !== null || starting || !ready) {
       return
     }
     if (action === 'start' ? !stopped : !running) {
@@ -308,24 +310,6 @@ export function ServicePage() {
     }
   }
 
-  /** 未安装时直接安装：不带 force，force 是「重新安装」的语义 */
-  const runInstall = async () => {
-    if (busy !== null || starting || !ready || !uninstalled) {
-      return
-    }
-    setBusy('install')
-    setPollError(null)
-    try {
-      await host.request('service.install')
-      reloadStatus()
-      reloadLogs()
-    } catch (failure) {
-      notifyFailure(normalizeHostError(failure))
-    } finally {
-      setBusy(null)
-    }
-  }
-
   const retryStatus = () => {
     setPollError(null)
     setLiveStatus(null)
@@ -340,24 +324,13 @@ export function ServicePage() {
   /** 错误时不拿旧 data 填充右侧元信息，避免看起来像刚刚探测过 */
   const meta = readError === null ? displayStatus : null
   const actionDisabled = busy !== null || starting || !ready
+  // 快照一行都没有说明没有日志来源（从未启动过，平台也没有 journal）：
+  // 点「查看全部」只会再取一次空数组，收口链接没有意义。
+  const noLogSource = logs.data !== null && logs.data.lines.length === 0
 
-  const headActions = unsupported ? (
-    // 平台没有 systemd：三个服务操作都不可用，按钮保留结构但禁用。
-    <Button tone="primary" icon={<PowerIcon size={15} />} disabled>
-      启动服务
-    </Button>
-  ) : uninstalled ? (
-    <Button
-      tone="primary"
-      icon={<DownloadIcon size={15} />}
-      disabled={actionDisabled}
-      onClick={() => {
-        void runInstall()
-      }}
-    >
-      {busy === 'install' ? '安装中…' : '安装服务'}
-    </Button>
-  ) : running ? (
+  // 主操作只看 TCP 探测：running 给重启/停止，stopped 给启动；
+  // 没有 systemd（supported=false）也不禁用，后端会自动走本地进程模式。
+  const headActions = running ? (
     <>
       <Button
         tone="secondary"
@@ -417,13 +390,7 @@ export function ServicePage() {
               <div className={styles.statusLine}>
                 <span
                   className={`${styles.dot} ${
-                    starting
-                      ? styles.dotStarting
-                      : unsupported
-                        ? styles.dotError
-                        : running
-                          ? styles.dotRunning
-                          : styles.dotStopped
+                    starting ? styles.dotStarting : running ? styles.dotRunning : styles.dotStopped
                   }`}
                   aria-hidden="true"
                 />
@@ -432,6 +399,10 @@ export function ServicePage() {
             </div>
           )}
           <dl className={styles.meta}>
+            <div className={styles.metaRow}>
+              <dt className={styles.metaLabel}>管理方式</dt>
+              <dd className={styles.metaValue}>{modeLabel}</dd>
+            </div>
             <div className={styles.metaRow}>
               <dt className={styles.metaLabel}>监听地址</dt>
               <dd className={`${styles.metaValue} ${styles.mono}`}>
@@ -474,23 +445,15 @@ export function ServicePage() {
               lines={lines}
               count={lines.length}
               height={logHeight}
-              emptyText={
-                logs.loading && !logs.data
-                  ? '正在读取日志…'
-                  : unsupported
-                    ? '当前平台没有 systemd 用户单元'
-                    : uninstalled
-                      ? '服务尚未安装'
-                      : '暂无日志'
-              }
+              emptyText={logs.loading && !logs.data ? '正在读取日志…' : '暂无日志'}
               onClear={() => {
                 // 只清本地显示；下一次读取或事件会重新填充
                 setLines([])
               }}
-              // 快照已是全部（后端上限）、未安装或平台不支持时收起收口链接：
-              // 这几种情况日志必定为空，点「查看全部」只会再取一次空数组
+              // 快照已是全部（后端上限）、正在读取或没有日志来源时收起收口链接。
+              // 停止也不再阻塞：本地模式的日志缓冲在停止后仍然保留，可以翻历史。
               footerAction={
-                fullLogs || logs.loading || !installed || !supported
+                fullLogs || logs.loading || noLogSource
                   ? undefined
                   : { label: '查看全部日志', onClick: () => setFullLogs(true) }
               }

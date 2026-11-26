@@ -28,20 +28,25 @@
 
 | 页面 | 方法                                                                                              |
 | ---- | ------------------------------------------------------------------------------------------------- |
-| 服务 | `system.status`、`service.start/stop/restart/install`、`service.logs` + 事件 `event.service.log`  |
+| 服务 | `system.status`、`service.start/stop/restart`、`service.logs` + 事件 `event.service.log`          |
 | 账户 | `auth.whoami`、`auth.login`、`auth.logout`、`account.list/add/password/delete`                    |
 | 备份 | `system.status`、`backup.list/create/restore/delete`                                              |
 | 设置 | `config.get`、`config.set`、`system.status`、`service.install/uninstall`、`desktop.dataDir(.set)` |
 
 约定：
 
-- 服务页状态以 `system.status.service` 的 `supported`/`installed` 为准：不支持 → 「当前平台不支持」；
-  支持但未安装 → 「未安装」+ 安装按钮；已安装才按 TCP 探测的 `running`/`stopped` 显示启停。
+- 服务页的主操作只看 `system.status.service.state`：`running` → 重启/停止，`stopped` → 启动，
+  `unknown` → 禁用。没装 systemd 也能启停（ipc 会托管本地 `serve` 子进程），所以 `installed` /
+  `supported` 不参与按钮判断；安装 systemd 用户单元是设置页的高级功能。
+- `system.status.service.mode` 与 `state` 正交，只用来展示「管理方式」：`systemd` →「systemd 用户单元」，
+  `process` →「桌面端本地进程」，`none` → stopped 时「未运行」、否则占位「—」。
+  `installed` 仍表示 unit 是否存在，`supported` 仍表示平台有没有 systemd，两者都不阻塞启停。
 - 读失败要显示错误说明 + 重试，不能把空数据显示成空态；真正的空列表才用 `ui/EmptyState`。
 - 写操作失败统一走 `normalizeHostError`，用 Toast 显示 `message`（`code` 只做分支判断）。
 - 写成功后 `reload()` 相关读请求；真后端里写方法是串行的，且并发顺序不保证，所以一次只允许一个在途操作。
 - 页面不读 `window.location.hash`。替身支持的 `-off` / `empty` / `login` / `statuserr` /
-  `-uninstalled` 后缀在 `app/mock-host.ts` 里处理，页面只管渲染后端给的数据。
+  `-systemd` 后缀在 `app/mock-host.ts` 里处理；`-uninstalled` 只是默认本地态的显式别名。
+  页面只管渲染后端给的数据。
 
 ## 视觉验收
 

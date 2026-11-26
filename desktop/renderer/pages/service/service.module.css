@@ -48,12 +48,6 @@
   box-shadow: 0 0 0 4px var(--hover);
 }
 
-/* 平台不支持 systemd：状态本身是错误，和读取失败的色系保持一致 */
-.dotError {
-  background: var(--danger);
-  box-shadow: 0 0 0 4px var(--danger-soft);
-}
-
 /* 状态读取失败：整块换成错误说明 + 重试，右侧元信息同时留空 */
 .statusError {
   display: flex;

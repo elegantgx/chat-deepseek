@@ -10,6 +10,7 @@ import type {
   ConfigProjection,
   ServiceLogEvent,
   ServiceLogsResult,
+  ServiceMode,
   ServiceStartResult,
   ServiceStopResult,
   SystemStatus,
@@ -209,6 +210,8 @@ interface MockState {
   pid: number
   startTimer: number | null
   installed: boolean
+  /** 当前由谁托管：启停会改写，安装/卸载也会切换，和状态卡「管理方式」对应 */
+  mode: ServiceMode
   unitPath: string
   /** `desktop.dataDir.set` 保存的待生效目录；current 不跟着变，模拟重启后生效 */
   savedDataDir: string
@@ -221,24 +224,23 @@ interface MockState {
 
 /**
  * hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、
- * `statuserr` 状态读失败、`uninstalled` 初始未安装。
+ * `statuserr` 状态读失败、`-systemd` 初始装了 unit、`-uninstalled` 是默认本地态的显式别名。
  */
 function hashFlags(): {
   running: boolean
   emptyBackups: boolean
   signedOut: boolean
   statusError: boolean
-  uninstalled: boolean
+  systemd: boolean
 } {
   const raw = window.location.hash.replace(/^#\/?/, '')
-  const uninstalled = /(^|-)uninstalled($|-)/.test(raw)
   return {
-    // 未安装的服务不可能在运行，否则「安装后立刻变成运行中」会误导验收。
-    running: !/(^|-)off($|-)/.test(raw) && !uninstalled,
+    // 默认就是「没装 systemd 的本地运行」：除非显式 -off，否则服务正在跑。
+    running: !/(^|-)off($|-)/.test(raw),
     emptyBackups: /(^|-)empty($|-)/.test(raw),
     signedOut: /(^|-)login($|-)/.test(raw),
     statusError: /(^|-)statuserr($|-)/.test(raw),
-    uninstalled,
+    systemd: /(^|-)systemd($|-)/.test(raw),
   }
 }
 
@@ -250,7 +252,9 @@ export function createMockHost(): HostClient {
     starting: false,
     pid: 4821,
     startTimer: null,
-    installed: !flags.uninstalled,
+    installed: flags.systemd,
+    // 没装 unit 时运行中是 ipc 托管的本地进程；装了 unit 则归 systemd。
+    mode: flags.systemd ? 'systemd' : flags.running ? 'process' : 'none',
     unitPath: '~/.config/systemd/user/chat-deepseek.service',
     savedDataDir: '',
     config: {
@@ -268,7 +272,7 @@ export function createMockHost(): HostClient {
       groups: ['Admin', 'User'],
       expiresAt: rfc3339(new Date(now.getTime() + 12 * 60 * 60 * 1000)),
     },
-    // 只有确实在运行才播种日志；`#off` / `#uninstalled` 下是空数组。
+    // 只有确实在运行才播种日志；`#off` 与从未启动的本地态是空数组。
     logs: flags.running ? seedLogs(now) : [],
   }
 
@@ -287,6 +291,7 @@ export function createMockHost(): HostClient {
       state: state.starting ? 'starting' : state.running ? 'running' : 'stopped',
       listen: state.config.listen,
       source: 'probe',
+      mode: state.mode,
       installed: state.installed,
       // 浏览器替身只在 Linux 桌面做验收，systemd 能力固定为可用。
       supported: true,
@@ -326,6 +331,8 @@ export function createMockHost(): HostClient {
       window.clearTimeout(state.startTimer)
     }
     state.starting = true
+    // 装不装 unit 决定由谁托管：没装就走 ipc 的本地子进程，装了就归 systemd。
+    state.mode = state.installed ? 'systemd' : 'process'
     for (const line of logLines) {
       appendLog(line)
     }
@@ -476,9 +483,6 @@ export function createMockHost(): HostClient {
       return { ok: true }
     },
     'service.start': () => {
-      if (!state.installed) {
-        fail('unavailable', '服务未安装')
-      }
       if (state.starting) {
         fail('unavailable', '服务操作正在进行，请稍候')
       }
@@ -489,7 +493,10 @@ export function createMockHost(): HostClient {
           listen: state.config.listen,
         } satisfies ServiceStartResult
       }
-      beginStarting(['Started chat-deepseek.service.'])
+      // 没装 unit 也能启动：后端会起本地 serve 子进程，systemd 只是可选的开机自启。
+      beginStarting(
+        state.installed ? ['Started chat-deepseek.service.'] : ['starting local serve process…']
+      )
       return {
         state: 'starting',
         pid: 0,
@@ -504,15 +511,23 @@ export function createMockHost(): HostClient {
         fail('unavailable', '服务未运行')
       }
       state.running = false
-      appendLog('Stopping chat-deepseek.service…')
-      appendLog('Stopped chat-deepseek.service.')
+      // 停掉之后没有托管者：装了 unit 归 systemd（stopped），否则回到 none。
+      state.mode = state.installed ? 'systemd' : 'none'
+      appendLog(
+        state.installed ? 'Stopping chat-deepseek.service…' : 'stopping local serve process…'
+      )
+      appendLog(state.installed ? 'Stopped chat-deepseek.service.' : 'local serve process stopped.')
       return { state: 'stopped' } satisfies ServiceStopResult
     },
     'service.restart': () => {
       if (state.starting) {
         fail('unavailable', '服务操作正在进行，请稍候')
       }
-      beginStarting(['Stopping chat-deepseek.service…', 'Started chat-deepseek.service.'])
+      beginStarting(
+        state.installed
+          ? ['Stopping chat-deepseek.service…', 'Started chat-deepseek.service.']
+          : ['restarting local serve process…']
+      )
       return {
         state: 'starting',
         pid: 0,
@@ -534,13 +549,14 @@ export function createMockHost(): HostClient {
           truncated = true
         }
       }
-      // 未安装时和真后端一样直接给空数组：journal 里可能残留上次安装的旧记录，
-      // 不能把它们当成「最近日志」。
-      const lines = state.installed ? state.logs.slice(-tail) : []
+      // 没装 unit 但曾经本地启动过时，日志缓冲仍在：停止后允许回看历史。
+      const lines = state.logs.slice(-tail)
       return { lines, truncated } satisfies ServiceLogsResult
     },
     'service.install': () => {
       state.installed = true
+      // 安装 unit 属于高级功能：之后由 systemd 托管，状态卡的管理方式随之切换。
+      state.mode = 'systemd'
       return { ok: true, unitPath: state.unitPath }
     },
     'service.uninstall': () => {
@@ -554,6 +570,7 @@ export function createMockHost(): HostClient {
       state.installed = false
       state.starting = false
       state.running = false
+      state.mode = 'none'
       return { ok: true }
     },
     'auth.whoami': () => ({ ...state.auth }),

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -80,6 +81,15 @@ type Server struct {
 	newLogTailer func() (logTailer, error)
 	renewHook    sessionRenewer
 
+	// 本地进程模式：unit 未安装时由 ipc 自己托管 `serve` 子进程，不依赖 systemd。
+	// procMu 保护 proc；缓冲区自带锁，因此组装错误信息时不会和输出 goroutine 抢同一把锁。
+	procMu            sync.Mutex
+	proc              *localServiceProcess
+	procLog           processLogBuffer
+	newProcessCmd     func(binary string, args []string) *exec.Cmd
+	localStartTimeout time.Duration
+	localStopTimeout  time.Duration
+
 	writerMu sync.Mutex
 	writer   *protocolWriter
 
@@ -113,6 +123,12 @@ func New(dataDir string, stderr io.Writer) (*Server, error) {
 		host:         currentHostKey(),
 		now:          time.Now,
 		sessionTTL:   ipcSessionTTL,
+
+		newProcessCmd: func(binary string, args []string) *exec.Cmd {
+			return exec.Command(binary, args...)
+		},
+		localStartTimeout: defaultLocalStartTimeout,
+		localStopTimeout:  defaultLocalStopTimeout,
 	}
 	for _, spec := range methodTable() {
 		s.methods[spec.name] = spec
@@ -211,6 +227,11 @@ func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	writer := &protocolWriter{out: bufio.NewWriter(out)}
 	s.setWriter(writer)
 	defer func() {
+		// ipc 退出时必须回收自己托管的 serve，否则子进程会继续占着端口变成孤儿。
+		// 放在停事件流之前：等子进程输出 goroutine 收尾，避免它们往已摘掉的 writer 写。
+		if err := s.stopLocalProcess(); err != nil {
+			s.logf("停止本地服务进程: %v", err)
+		}
 		// 先停事件流再摘掉 writer，避免 Serve 返回后 tail goroutine 还往旧 writer 写。
 		s.stopLogTail()
 		// 登录态绑定当前进程：正常退出时主动吊销，失败只记 stderr。

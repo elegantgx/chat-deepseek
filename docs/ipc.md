@@ -38,6 +38,7 @@ chat-deepseek ipc [--data-dir <dir>]
   先发的 `backup.delete` 可能后到的 `backup.restore` 之前跑完。所以客户端必须「等一个写请求的响应，再发下一个」，
   不要把写操作当队列一次性堆进管道。并发冲突时返回 `unavailable`（服务操作）或按资源状态报错（备份、账户）。
 - 事件（无 `id` 的 `event.*` 通知）和响应共用同一把 stdout 锁，不会出现半行交错；事件只在 `service.start`/`service.restart` 成功后或 `service.logs` 发现服务正在运行时开始。
+  本地进程模式下，子进程的每一行输出都会立即转成事件，见 §4.11 与 §5。
 
 请求：
 
@@ -94,16 +95,17 @@ chat-deepseek ipc [--data-dir <dir>]
 
 探测配置里的监听地址，返回版本、数据目录和服务状态。不需要参数，不读数据库、不写文件。
 
-| 字段                | 类型                                      | 可空 | 说明                                                 |
-| ------------------- | ----------------------------------------- | ---- | ---------------------------------------------------- |
-| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                   |
-| `dataDir`           | string                                    | 否   | 数据目录绝对路径                                     |
-| `service`           | object                                    | 否   | 服务探测结果                                         |
-| `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                   |
-| `service.listen`    | string                                    | 否   | `config.json` 里的监听地址（未改动）                 |
-| `service.source`    | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测                            |
-| `service.installed` | bool                                      | 否   | systemd 用户单元是否已安装；不可用平台恒为 `false`   |
-| `service.supported` | bool                                      | 否   | 当前平台是否有可用的 systemd 用户管理器              |
+| 字段                | 类型                                      | 可空 | 说明                                               |
+| ------------------- | ----------------------------------------- | ---- | -------------------------------------------------- |
+| `version`           | string                                    | 否   | 构建版本，如 `0.1.4-official0.1.4`                 |
+| `dataDir`           | string                                    | 否   | 数据目录绝对路径                                   |
+| `service`           | object                                    | 否   | 服务探测结果                                       |
+| `service.state`     | `"running"` \| `"stopped"` \| `"unknown"` | 否   | TCP 探测结果，见下                                 |
+| `service.listen`    | string                                    | 否   | `config.json` 里的监听地址（未改动）               |
+| `service.source`    | `"probe"`                                 | 否   | 状态来源；固定为 TCP 探测                          |
+| `service.installed` | bool                                      | 否   | systemd 用户单元是否已安装；不可用平台恒为 `false` |
+| `service.supported` | bool                                      | 否   | 当前平台是否有可用的 systemd 用户管理器            |
+| `service.mode`      | `"process"` \| `"systemd"` \| `"none"`    | 否   | 谁在管服务，见下                                   |
 
 `state` 语义：
 
@@ -112,9 +114,20 @@ chat-deepseek ipc [--data-dir <dir>]
 - `unknown`：探测本身无法进行（监听地址格式非法、DNS 解析失败等）；不会凭 PID 或 systemd 猜测。
 
 `installed`/`supported` 与 `state` 正交：TCP 探测只能说明端口通不通，分不出「单元没装」和
-「装了但没启动」。桌面端据 `supported=false` 显示「当前平台不支持」，据 `supported && !installed`
-显示「未安装」并给安装入口。安装状态读取失败（权限、`systemctl` 异常）不会让 `system.status`
-报错：`installed` 保守返回 `false`，`supported` 退回平台能力判断，原因只写 stderr。
+「装了但没启动」。桌面端不会把「未安装」当成不可用：`supported && !installed` 时仍显示
+「已停止」并允许以本地进程启动（§4.8），安装 systemd 单元只是「开机自启」的可选入口。
+`supported=false` 时只禁用安装入口，本地运行不受影响。安装状态读取失败（权限、`systemctl` 异常）
+不会让 `system.status` 报错：`installed` 保守返回 `false`，`supported` 退回平台能力判断，
+原因只写 stderr。
+
+`mode` 回答「谁在管」，与 `state` 正交，取值固定：
+
+- `process`：ipc 当前托管着一个活着的 `serve` 子进程（本地进程模式，不需要 systemd）；
+- `systemd`：没有托管子进程，且 systemd 用户单元已安装（不论该单元是 running 还是 stopped）；
+- `none`：既没有托管子进程，也没有安装 systemd 用户单元。
+
+`mode` 只看进程/单元归属，不根据端口是否可连通反推；端口通不通仍然只由 `state` 表达。
+所以 `mode:"process"` 且 `state:"starting"`（刚拉起、还没监听）是合法组合。
 
 通配地址会探测回环：`0.0.0.0` → `127.0.0.1`，`::` → `::1`，空主机名 → `127.0.0.1`。
 
@@ -132,7 +145,8 @@ chat-deepseek ipc [--data-dir <dir>]
       "listen": "127.0.0.1:8091",
       "source": "probe",
       "installed": true,
-      "supported": true
+      "supported": true,
+      "mode": "systemd"
     }
   }
 }
@@ -142,17 +156,17 @@ chat-deepseek ipc [--data-dir <dir>]
 
 客户端启动时应先调用它，确认协议版本和可用方法。
 
-| 字段                 | 类型     | 可空 | 说明                                                                     |
-| -------------------- | -------- | ---- | ------------------------------------------------------------------------ |
-| `platform`           | string   | 否   | Go 的 `runtime.GOOS`：`linux`、`windows`、`darwin`                       |
-| `methods`            | string[] | 否   | 实际注册的方法名，顺序稳定；由 `internal/ipc` 方法表生成                 |
-| `features`           | object   | 否   | 能力开关                                                                 |
-| `features.systemd`   | bool     | 否   | 本阶段固定 `false`（不表示 `service.*` 方法不存在）                      |
-| `features.ssh`       | bool     | 否   | 本阶段固定 `false`                                                       |
-| `features.autostart` | bool     | 否   | 本阶段固定 `false`                                                       |
-| `features.backup`    | bool     | 否   | 固定 `true`：`backup.create/restore/delete` 可用                         |
-| `features.service`   | bool     | 否   | 固定 `true`：`service.*` 已注册；底层 systemd 不可用时返回 `unavailable` |
-| `ipcVersion`         | number   | 否   | 控制面契约版本；本版为 `1`                                               |
+| 字段                 | 类型     | 可空 | 说明                                                                                           |
+| -------------------- | -------- | ---- | ---------------------------------------------------------------------------------------------- |
+| `platform`           | string   | 否   | Go 的 `runtime.GOOS`：`linux`、`windows`、`darwin`                                             |
+| `methods`            | string[] | 否   | 实际注册的方法名，顺序稳定；由 `internal/ipc` 方法表生成                                       |
+| `features`           | object   | 否   | 能力开关                                                                                       |
+| `features.systemd`   | bool     | 否   | 本阶段固定 `false`（不表示 `service.*` 方法不存在）                                            |
+| `features.ssh`       | bool     | 否   | 本阶段固定 `false`                                                                             |
+| `features.autostart` | bool     | 否   | 本阶段固定 `false`                                                                             |
+| `features.backup`    | bool     | 否   | 固定 `true`：`backup.create/restore/delete` 可用                                               |
+| `features.service`   | bool     | 否   | 固定 `true`：`service.*` 已注册；无 systemd 时走本地进程模式，二者都不可用时返回 `unavailable` |
+| `ipcVersion`         | number   | 否   | 控制面契约版本；本版为 `1`                                                                     |
 
 `features` 不新增认证/账户开关：对应方法始终注册，调用时按会话与权限返回结构化错误。
 
@@ -373,21 +387,32 @@ service.uninstall
 
 ### 4.8 `service.start`
 
-启动已安装的服务。复用 `internal/service` 的 systemd 逻辑（用户级 `systemctl --user`），
-不另写进程管理；本版不支持 `--system`/`--foreground` 参数。
+启动服务，不需要参数。**不安装 systemd 也能用**：unit 已安装时走 `internal/service` 的
+systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平台没有 systemd）时，
+由 ipc 自己托管一个本地 `serve` 子进程。systemd 只作为可选的「开机自启」增强，
+不是启停的前提。本版不支持 `--system`/`--foreground` 参数。
 
-| 字段     | 类型                        | 可空 | 说明                                             |
-| -------- | --------------------------- | ---- | ------------------------------------------------ |
-| `state`  | `"running"` \| `"starting"` | 否   | 启动后 TCP 探测通过为 `running`，否则 `starting` |
-| `pid`    | number                      | 否   | systemd 的 `MainPID`；查不到时为 `0`             |
-| `listen` | string                      | 否   | `config.json` 里的监听地址                       |
+| 字段     | 类型                        | 可空 | 说明                                                     |
+| -------- | --------------------------- | ---- | -------------------------------------------------------- |
+| `state`  | `"running"` \| `"starting"` | 否   | 启动后 TCP 探测通过为 `running`，否则 `starting`         |
+| `pid`    | number                      | 否   | systemd 的 `MainPID`，或本地子进程的 pid；查不到时为 `0` |
+| `listen` | string                      | 否   | `config.json` 里的监听地址                               |
 
 - 启动/停止/重启同一时刻只允许一个在途操作。第二个并发请求立即返回
   `{"error":{"code":"unavailable","message":"服务操作正在进行，请稍候"}}`，避免双击按钮起两个进程。
-- 平台不支持 systemd、unit 未安装或 `systemctl` 失败时返回 `unavailable`，`message` 为底层中文错误。
-- 成功后自动开始 `event.service.log` 跟随（见 §5）。
+- **unit 已安装**：调用 `systemctl --user start`，`pid` 取自 `MainPID`，成功后开始 journal 事件跟随。
+- **unit 未安装**：用当前二进制启动
+  `serve --data-dir <dataDir> --listen <config.listen> --no-browser`，最多等 **8 秒**让 TCP 探测通过：
+  通过返回 `state:"running"`，进程仍活着但还没监听返回 `state:"starting"`，`pid` 为子进程 pid。
+  成功响应不直接带 `mode`，下一次 `system.status` 会看到 `mode:"process"`。
+- 本地模式下如果监听地址已经被**别的进程**占用（探测 `running`，但 ipc 没有托管子进程，unit 又未安装），
+  返回 `unavailable`，message 明确说明「监听地址已被占用，无法启动本地进程」，不会盲目 spawn。
+- 子进程启动即失败或提前退出时返回 `unavailable`，message 带上最后几行输出（stdout/stderr 都会被
+  格式化成 `HH:MM:SS LEVEL message` 后截取），便于定位端口冲突、数据目录不可写等原因。
+- 本地子进程的每一行输出都会立即发 `event.service.log`（见 §5），因此启动阶段的报错也能在页面看到。
+- 平台不支持 systemd 且本地进程也无法启动（例如数据目录不可写）时返回 `unavailable`，message 为底层中文错误。
 
-示例：
+示例（unit 已安装，或本地进程已监听）：
 
 ```json
 {
@@ -399,7 +424,15 @@ service.uninstall
 
 ### 4.9 `service.stop`
 
-停止服务。成功返回 `{"state":"stopped"}`；失败语义同 `service.start`，返回 `unavailable`。
+停止服务，不需要参数。成功返回 `{"state":"stopped"}`；失败返回 `unavailable`。
+
+- **本地进程模式**（ipc 托管着子进程）：先发 `SIGTERM`，最多等 **5 秒**；超时发 `SIGKILL`，
+  确认退出后清掉进程登记并返回 `stopped`（此时 `mode` 变为 `none`）。若 ipc 登记过本地子进程、
+  但它已经自己退出，同样会清理登记并返回 `stopped`，不会落到 systemd 分支报「服务未安装」。
+  判断依据是 ipc 自己的子进程登记，不是端口探测——**别的进程占着端口不会被当成「我们的进程已停」**。
+- 没有本地子进程时走 systemd 的 `systemctl --user stop`（现有行为）。
+- 既没有本地子进程、unit 也未安装时保持 `unavailable`，message 为底层中文原因。
+- 停止后 `event.service.log` 跟随结束；本地缓冲仍保留，`service.logs` 还能看到历史，直到 ipc 退出。
 
 示例：
 
@@ -409,7 +442,12 @@ service.uninstall
 
 ### 4.10 `service.restart`
 
-重启服务。字段与 `service.start` 相同；成功后重新开始日志跟随。
+重启服务。字段与 `service.start` 相同，不需要参数。
+
+- **本地进程模式**：先按 §4.9 停掉子进程，再按 §4.8 的本地分支重新拉起并等待端口
+  （同一套 8 秒等待与错误处理），成功后返回新的 `pid`。
+- 没有本地子进程时走 systemd 的 `systemctl --user restart`（现有行为），成功后重新开始 journal 跟随。
+- 两者都没有时返回 `unavailable`，语义同 `service.stop`。
 
 示例：
 
@@ -423,8 +461,20 @@ service.uninstall
 
 ### 4.11 `service.logs`
 
-读取服务最近 N 行日志。日志源是 systemd 用户单元的 journal（`journalctl --user -u chat-deepseek.service`），
-因为 `serve` 本身只写 stderr、不落日志文件。
+读取服务最近 N 行日志。日志源按模式选择：
+
+- **本地进程模式**（ipc 托管着活着的 `serve` 子进程）：读取 ipc 内存里的输出缓冲，最多保留最近
+  **2000 行**；日志级别优先按消息正文里的 slog 级别标记映射（见下），没有再按输出流回退。
+- **systemd 模式**（没有活进程，且 unit 已安装）：读取用户单元 journal
+  （`journalctl --user -u chat-deepseek.service`）。
+- **没有活进程且 unit 未安装**：返回本地缓冲里的历史（本地模式停止后仍能看），缓冲为空就是 `[]`。
+
+来源按「当前谁在管」决定，而不是「缓冲里有没有行」：
+
+- 有活着的本地子进程 → 只读缓冲，不读 journal；
+- 没有活进程但 unit 已安装 → 必须读 journal，**以前的本地缓冲不会再把 journal 截胡**；
+- 没有活进程且 unit 未安装 → 读本地缓冲历史；
+- `Status` 查询失败时无法判断归属：保守地优先返回已有本地缓冲，缓冲为空再走 journal。
 
 参数：
 
@@ -439,18 +489,25 @@ service.uninstall
 | `lines`     | string[] | 否   | 最近的日志行，从旧到新；没有日志时为 `[]` 不是 `null` |
 | `truncated` | bool     | 否   | `tail` 超过 `5000` 被截断时为 `true`，否则 `false`    |
 
-每行格式固定为 `HH:MM:SS LEVEL message`，渲染层可直接解析：
+每行格式固定为 `HH:MM:SS LEVEL message`，渲染层可直接解析，两种日志源完全一致：
 
-- 时间取 journal 的 `__REALTIME_TIMESTAMP`（微秒）并转成本地时区，不再由客户端补“当前时刻”；
-- `LEVEL` 由 syslog `PRIORITY` 映射：`0`–`3` → `ERROR`，`4` → `WARN`，其余（含缺失）→ `INFO`；
-- `message` 中的换行/空行折叠成 ` / `，保证一行一条、不出现空行。
+- 时间取 journal 的 `__REALTIME_TIMESTAMP`（微秒）或本地进程输出被 ipc 读到的时刻，转成本地时区，
+  不再由客户端补“当前时刻”；
+- `LEVEL` 在 systemd 模式由 syslog `PRIORITY` 映射（`0`–`3` → `ERROR`，`4` → `WARN`，其余 → `INFO`）；
+- 本地进程模式先识别 slog TextHandler 风格的 `level=INFO|WARN|ERROR|DEBUG` token（值可能带引号，
+  token 之间以单空格分隔）：命中就用它分级（`DEBUG` 归 `INFO`），并从消息里删掉 `level=...` token；
+  `time=...` 保留在正文里，作为 serve 自带的诊断信息；
+- 本地进程没有级别 token 时才按输出流回退：stdout → `INFO`，stderr → `ERROR`。`serve` 的正常日志
+  走 slog 写 stderr，靠这一步避免把启动日志全部涂成红色 `ERROR`；
+- `message` 中的换行/空行折叠成 `/`，保证一行一条、不出现空行；纯空行直接丢弃。
 
-- **单元未安装时直接返回 `{ "lines": [], "truncated": false }`**，不读 journal 残留、也不开启事件跟随；
-  `tail` 超上限时仍按规则返回 `truncated`。平台不支持 systemd 时 `installed` 恒为 `false`，
-  因此同样得到空数组，页面据此显示「当前平台没有 systemd 用户单元」。
+- **单元未安装且本地没有缓冲时直接返回 `{ "lines": [], "truncated": false }`**，不读 journal 残留、
+  也不开启事件跟随；`tail` 超上限时仍按规则返回 `truncated`。平台不支持 systemd 时 `installed`
+  恒为 `false`，因此同样得到空数组，页面据此显示「当前平台没有 systemd 用户单元」。
 - `journalctl` 不可用（已安装但找不到命令、无法连接用户 journal）时返回 `unavailable`，不会伪造空日志。
-- 如果探测到服务正在运行，本方法会顺带开启 `event.service.log` 跟随；`service.start`/`service.restart`
-  成功后也会开启。停止服务或 IPC 退出时跟随自动结束。跟随只对已安装的 unit 生效。
+- 如果探测到服务正在运行且 unit 已安装，本方法会顺带开启 `event.service.log` 跟随；
+  `service.start`/`service.restart` 成功后也会开启。停止服务或 IPC 退出时跟随自动结束。
+  本地进程模式不跟 journal，事件直接来自子进程输出。
 - 读取是快照；实时追加走事件，不要轮询 `service.logs` 做 tail。
 
 示例：
@@ -761,18 +818,22 @@ service.uninstall
 { "jsonrpc": "2.0", "method": "event.service.log", "params": { "line": "...", "stream": "stdout" } }
 ```
 
-| 字段            | 类型                     | 说明                                                                                 |
-| --------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| `method`        | string                   | 固定 `event.service.log`                                                             |
-| `params.line`   | string                   | 一行日志；可能包含换行，JSON 中会转义                                                |
-| `params.stream` | `"stdout"` \| `"stderr"` | 日志流。journal 记录里能识别 `_STREAM_ID=stderr` 时为 `stderr`，否则按 `stdout` 处理 |
+| 字段            | 类型                     | 说明                                                                                                                   |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `method`        | string                   | 固定 `event.service.log`                                                                                               |
+| `params.line`   | string                   | 一行日志，格式固定为 `HH:MM:SS LEVEL message`；与 `service.logs` 快照同源                                              |
+| `params.stream` | `"stdout"` \| `"stderr"` | 日志流。本地进程模式按子进程的真实输出流；journal 记录里能识别 `_STREAM_ID=stderr` 时为 `stderr`，否则按 `stdout` 处理 |
 
 - 事件没有 `id`；客户端按 `method` 分发，不要和请求响应混在同一个 `id` 匹配表里。
 - 事件和响应共用 stdout 锁并逐行 flush，保证不会出现半行交错。
 - 事件可能出现在任意两条响应之间（包括触发它的方法响应之前）；客户端按 `id` 匹配响应、按 `method` 分发事件，不要假设先后。
-- 事件只在服务启动成功、或 `service.logs` 发现服务运行中时开启；跟随的是 journal 的追加内容。
-- 事件是尽力而为的观测通道：journal 不可用只会写 stderr，不会让启动请求失败。
-- 停止服务、重启服务、stdin EOF 或进程退出都会停止跟随。
+- 事件同样有两个来源：
+  - systemd 模式：服务启动成功、或 `service.logs` 发现服务运行中后，跟随 journal 的追加内容；
+  - 本地进程模式：`service.start`/`service.restart` 拉起子进程后，子进程的每一行 stdout/stderr
+    立即转成事件，`line` 与 `service.logs` 返回的快照行完全一致，`stream` 为 `stdout`/`stderr`。
+- 事件是尽力而为的观测通道：journal 不可用只会写 stderr，不会让启动请求失败；本地子进程输出
+  扫描失败也只写 stderr。
+- 停止服务、重启服务、stdin EOF 或进程退出都会停止跟随；本地模式下 ipc 退出会连同子进程一起回收。
 
 ## 6. 版本号策略
 
@@ -891,11 +952,19 @@ printf '%s\n' \
 
 ## 9. 已知限制（诚实清单）
 
-- `service.*` 底层只有现有 `internal/service` 的 systemd 用户级实现；Windows/macOS、没有 systemd 的
-  Linux 或未安装 unit 都会返回 `unavailable`，不会退化成「在 IPC 里另起一个前台进程」。
-- `pid` 来自 `systemctl show MainPID`；拿不到时是 `0`，客户端应按 0 表示未知。
-- `service.logs` 依赖 `journalctl`。本版不读取额外日志文件，也不会把 CLI 前台输出接进事件流。
-- journal 通常无法可靠区分 stdout/stderr，`params.stream` 可能统一为 `stdout`；字段保留是为了以后换日志源。
+- `service.*` 现在有两条路径：unit 已安装时用 `internal/service` 的 systemd 用户级实现；unit 未安装
+  （含 Windows/macOS、没有 systemd 的 Linux）时退化成 ipc 自己托管 `serve` 子进程。systemd 只作为
+  可选的「开机自启」增强，不再是启停前提。
+- 本地进程模式只在 ipc 进程生命周期内有效：ipc 退出会回收子进程，因此重启 ipc 后 `mode` 会回到
+  `none`（除非已安装 unit）。这也是它与 systemd 的核心区别。
+- 本地进程模式不写日志文件，缓冲只在内存里（约 2000 行）；ipc 退出后历史不可恢复。需要长期留存
+  请安装 systemd unit。
+- 本地子进程输出超过单行上限（1 MiB）时，该流的扫描会停止并只写 stderr；正常 `serve` 输出不会触发。
+- `pid` 在 systemd 模式来自 `systemctl show MainPID`，在本地模式是子进程 pid；拿不到时是 `0`，
+  客户端应按 0 表示未知。
+- `service.logs` 的 systemd 模式依赖 `journalctl`；本地模式读内存缓冲，不读 journal 残留。
+- journal 通常无法可靠区分 stdout/stderr，systemd 模式下 `params.stream` 可能统一为 `stdout`；
+  本地进程模式能准确区分。字段保留是为了两条路径共用。
 - `truncated` 只在 `tail` 超过 `5000` 被截断时为 `true`；只返回请求的最近 N 行，不额外统计总行数。
 - `backup.restore` 成功返回的是归档里恢复到数据目录的条目名，不是恢复前的文件内容或校验和。
 - 不校验 `backup.restore` 归档与当前产品版本的兼容性，和 CLI 行为一致。

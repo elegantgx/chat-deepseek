@@ -268,13 +268,17 @@ xwininfo -root -tree | grep -i chat-deepseek
 4. 主进程没有热重载，没有菜单定制、托盘、多窗口、协议处理（deep link）、自动更新。
 5. 未在 Windows/macOS 实机验证；容器/CI 里若 `$HOME` 只读，正常启动必须把 userData 指到可写目录
    （见上文），否则 Chromium 直接 SIGTRAP；`chrome-sandbox` 缺 setuid 时还要临时加 `--no-sandbox`（仅测试用）。
-6. 事件通道有 `event.backend.state`（主进程发）和 `event.service.log`（Go 侧日志跟随）；
-   服务日志只在 Linux 用户级 systemd + journalctl 可用时才有。
+6. 事件通道有 `event.backend.state`（主进程发）和 `event.service.log`（Go 侧日志）；
+   服务日志有两个来源：装了 systemd 用户单元时读 journal（`journalctl -o json`，保留真实时间与级别），
+   本地进程模式读 ipc 内存里的输出缓冲（约 2000 行，ipc 退出即丢）。
 7. 热更只验证了「dev server 起得来 + Electron 能加载它」；没有可视环境，没实际观察过改文件后的
    HMR 替换。`pnpm dev` 那套 8090/8091 与桌面端无关，桌面端 dev server 用 8092。
 8. **登录态绑定 ipc 进程**：会话文件按「PID + 进程启动时间」命名，TTL 12 小时并在每次成功请求后续期，
    进程退出会主动吊销；重启应用需要重新登录（v1 刻意不做「记住我」）。
-9. **`service.*` 只有 Linux 用户级 systemd 实现**：其它平台返回 `unavailable`，页面会照原样展示后端文案。
+9. **`service.*` 不依赖 systemd 也能用**：单元未安装时由 ipc 托管 `chat-deepseek serve` 子进程
+   （本地运行模式），停止/重启/日志都走这条路径；systemd 只是可选的「开机自启」增强。
+   本地进程跟着 ipc 走——桌面端退出会停止服务；Windows/macOS 上 ipc 被强杀时没有 `Pdeathsig`，
+   子进程可能残留（仅兜底路径，正常关闭会显式回收）。
 10. **GPU 崩溃自动退回软件合成**：没有 `/dev/dri`（容器、部分虚拟机）、上次 GPU 崩溃留下的标记、
     显式 `--disable-gpu` 三种情况都直接走软件合成。有 GPU 但驱动/沙箱不让用时，Chromium 会对 GPU 进程
     重试三次后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出；主进程收到第一次

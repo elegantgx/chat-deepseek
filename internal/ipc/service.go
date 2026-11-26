@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/elegantgx/chat-deepseek/internal/config"
@@ -32,6 +34,25 @@ const (
 
 	defaultLogTail = 200
 	maxLogTail     = 5000
+
+	// 本地进程模式：unit 未安装时由 ipc 自己拉起 `serve`，systemd 只作为可选的
+	// 开机自启增强。启动等待端口探测通过的上限是 8s，避免 serve 卡住时桌面端一直转圈。
+	defaultLocalStartTimeout = 8 * time.Second
+	// 停止时先 SIGTERM，最多等 5s 让它优雅关闭，再 SIGKILL。
+	defaultLocalStopTimeout = 5 * time.Second
+	// SIGKILL 之后确认 Wait 返回的时间；正常内核会立刻回收，这里只是兜底。
+	localKillTimeout = 2 * time.Second
+	// 启动等待的轮询间隔；比 TCP 探测超时略小，避免每次都等满探测窗口。
+	localStartPollInterval = 100 * time.Millisecond
+	// 进程输出缓冲上限：约 2000 行，停止后仍可读，但不会无限增长。
+	localLogCapacity = 2000
+	// 失败信息只带最后几行输出，避免把整个缓冲塞进错误 message。
+	localFailureTailLines = 5
+
+	// mode 回答「谁在管」，与 state（端口通不通）正交。
+	serviceModeProcess = "process"
+	serviceModeSystemd = "systemd"
+	serviceModeNone    = "none"
 
 	// 与 CLI/备份包保持同一句中文；GUI 只看 code，不解析这句话。
 	backupRunningMessage  = "服务运行中，备份已暂停"
@@ -166,14 +187,34 @@ func (s *Server) serviceStart(_ json.RawMessage) (any, *rpcError) {
 	if err != nil {
 		return nil, internalError("读取配置失败", err)
 	}
-	controller := s.newService()
-	ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
-	defer cancel()
-	if err := controller.Start(ctx); err != nil {
-		return nil, serviceOperationError(err)
+	// 已经有 ipc 托管的进程时直接投影它：重复点「启动」不应该再 spawn 一个。
+	if process := s.localProcess(); process != nil && !process.exited() {
+		return s.localProcessState(process, cfg), nil
 	}
-	s.restartLogTail()
-	return s.runningState(controller, cfg, ctx), nil
+
+	controller := s.newService()
+	statusCtx, statusCancel := context.WithTimeout(context.Background(), serviceStatusTimeout)
+	status, statusErr := controller.Status(statusCtx)
+	statusCancel()
+	if statusErr != nil {
+		// 读不到安装状态时退回本地进程模式：它不依赖 systemd，比直接报错更可用。
+		// 如果其实有别的进程在监听，startLocalService 会在 spawn 之前返回「已被占用」。
+		s.logf("读取服务安装状态失败，改用本地进程模式: %v", statusErr)
+	}
+	if statusErr == nil && status.Installed {
+		ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
+		defer cancel()
+		if err := controller.Start(ctx); err != nil {
+			return nil, serviceOperationError(err)
+		}
+		s.restartLogTail()
+		return s.runningState(controller, cfg, ctx), nil
+	}
+	result, rpcErr := s.startLocalService(cfg)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return result, nil
 }
 
 func (s *Server) serviceStop(_ json.RawMessage) (any, *rpcError) {
@@ -181,6 +222,18 @@ func (s *Server) serviceStop(_ json.RawMessage) (any, *rpcError) {
 		return nil, unavailableError("服务操作正在进行，请稍候")
 	}
 	defer s.endServiceOp()
+
+	// 只要登记过本地子进程就算本地模式：即使它已经退出，用户点「停止」的预期也是
+	// stopped，而不是落到 systemd 分支报「服务未安装」。注意判断依据是 ipc 自己的
+	// 登记，不是端口探测——别的进程占着端口不应被当成「我们的进程已停」。
+	if process := s.localProcess(); process != nil {
+		if err := s.stopLocalProcess(); err != nil {
+			return nil, unavailableError(err.Error())
+		}
+		// 本地进程的增量日志直接来自子进程输出，不依赖 journal，跟随在这里没有意义。
+		s.stopLogTail()
+		return serviceStopResult{State: stateStopped}, nil
+	}
 
 	controller := s.newService()
 	ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
@@ -202,6 +255,18 @@ func (s *Server) serviceRestart(_ json.RawMessage) (any, *rpcError) {
 	if err != nil {
 		return nil, internalError("读取配置失败", err)
 	}
+	if s.localProcessRunning() {
+		if err := s.stopLocalProcess(); err != nil {
+			return nil, unavailableError(err.Error())
+		}
+		s.stopLogTail()
+		result, rpcErr := s.startLocalService(cfg)
+		if rpcErr != nil {
+			return nil, rpcErr
+		}
+		return result, nil
+	}
+
 	controller := s.newService()
 	ctx, cancel := context.WithTimeout(context.Background(), serviceOperationTimeout)
 	defer cancel()
@@ -210,6 +275,86 @@ func (s *Server) serviceRestart(_ json.RawMessage) (any, *rpcError) {
 	}
 	s.restartLogTail()
 	return s.runningState(controller, cfg, ctx), nil
+}
+
+// startLocalService 在 unit 未安装（或 systemd 不可用）的机器上启动 ipc 托管的 serve：
+// 先确认端口没有被别的进程占用，再 spawn，最后等 TCP 探测通过。
+func (s *Server) startLocalService(cfg config.Config) (serviceStateResult, *rpcError) {
+	if process := s.localProcess(); process != nil && !process.exited() {
+		return s.localProcessState(process, cfg), nil
+	}
+	// 端口已经通了但不是我们的子进程：可能是用户自己跑的 serve、另一个 ipc，或别的程序。
+	// 这时盲目 spawn 只会得到「listen 失败」，直接给出可操作的错误。
+	if probeServiceState(cfg.Listen, s.probeTimeout) == stateRunning {
+		return serviceStateResult{}, unavailableError(fmt.Sprintf(
+			"监听地址 %s 已被占用，无法启动本地进程；请先停止占用该端口的程序",
+			cfg.Listen,
+		))
+	}
+	process, err := s.startLocalProcess(cfg)
+	if err != nil {
+		return serviceStateResult{}, unavailableError(err.Error())
+	}
+
+	deadline := time.Now().Add(s.localStartWait())
+	for {
+		if probeServiceState(cfg.Listen, s.probeTimeout) == stateRunning {
+			s.stopLogTail()
+			return serviceStateResult{State: stateRunning, PID: process.pid, Listen: cfg.Listen}, nil
+		}
+		select {
+		case <-process.done:
+			return serviceStateResult{}, s.localProcessFailure(process)
+		default:
+		}
+		if !time.Now().Before(deadline) {
+			// 进程还活着但 8s 内没监听：和 systemd 分支一样返回 starting，
+			// 让 UI 显示「启动中」，而不是把还在跑的进程判死。
+			s.stopLogTail()
+			return serviceStateResult{State: "starting", PID: process.pid, Listen: cfg.Listen}, nil
+		}
+		select {
+		case <-process.done:
+			return serviceStateResult{}, s.localProcessFailure(process)
+		case <-time.After(localStartPollInterval):
+		}
+	}
+}
+
+// localProcessState 用现有子进程投影状态：端口通了是 running，否则仍是 starting。
+func (s *Server) localProcessState(process *localServiceProcess, cfg config.Config) serviceStateResult {
+	state := "starting"
+	if probeServiceState(cfg.Listen, s.probeTimeout) == stateRunning {
+		state = stateRunning
+	}
+	return serviceStateResult{State: state, PID: process.pid, Listen: cfg.Listen}
+}
+
+// localProcessFailure 把提前退出的子进程翻译成 unavailable，并带上最后几行输出，
+// 便于定位端口冲突、数据目录不可写这类真实原因。
+func (s *Server) localProcessFailure(process *localServiceProcess) *rpcError {
+	message := "本地服务进程启动失败"
+	if process.exitErr != nil {
+		message += "：" + process.exitErr.Error()
+	}
+	if tail := s.procLog.tail(localFailureTailLines); len(tail) > 0 {
+		message += "；输出：" + strings.Join(tail, " / ")
+	}
+	return unavailableError(message)
+}
+
+func (s *Server) localStartWait() time.Duration {
+	if s.localStartTimeout > 0 {
+		return s.localStartTimeout
+	}
+	return defaultLocalStartTimeout
+}
+
+func (s *Server) localStopWait() time.Duration {
+	if s.localStopTimeout > 0 {
+		return s.localStopTimeout
+	}
+	return defaultLocalStopTimeout
 }
 
 // runningState 在启动/重启成功后做一次 TCP 探测：还没监听时返回 starting，
@@ -259,19 +404,28 @@ func (s *Server) serviceLogs(params json.RawMessage) (any, *rpcError) {
 	if rpcErr != nil {
 		return nil, rpcErr
 	}
-	// unit 没安装时 journal 里仍可能留着上次安装的旧记录，读出来会被当成「最近日志」；
-	// 而且未安装的 unit 没有跟随的意义，所以直接给空数组，不读 journal、也不开事件流。
-	// Status 失败（权限、systemctl 异常）时按「无法确认」继续走原读取路径：
-	// 一次状态查询失败不应该把还能读到的日志整个吞掉，错误只写 stderr。
+	// 有活着的本地子进程时来源是确定的：日志只可能在 ipc 的内存缓冲里，不能去读
+	// journal（unit 未安装时那里只有旧残留）。进程刚启动还没输出时返回 []。
+	if s.localProcessRunning() {
+		return serviceLogsResult{Lines: s.procLog.tail(tail), Truncated: truncated}, nil
+	}
+	// 没有活进程时看 unit 是否接管：装了 unit 就走 journal，不能被以前的本地缓冲截胡，
+	// 否则用户装好 systemd 后日志页会永远停在旧的本地产出上。
+	// Status 失败（权限、systemctl 异常）时无法判断归属：保守地优先已有本地缓冲，
+	// 缓冲为空再走 journal——一次状态查询失败不应该把还能读到的历史整个吞掉。
 	controller := s.newService()
 	statusCtx, statusCancel := context.WithTimeout(context.Background(), serviceStatusTimeout)
 	defer statusCancel()
 	status, statusErr := controller.Status(statusCtx)
 	if statusErr != nil {
 		s.logf("读取服务安装状态失败: %v", statusErr)
-	}
-	if statusErr == nil && !status.Installed {
-		return serviceLogsResult{Lines: []string{}, Truncated: truncated}, nil
+		if lines := s.procLog.tail(tail); len(lines) > 0 {
+			return serviceLogsResult{Lines: lines, Truncated: truncated}, nil
+		}
+	} else if !status.Installed {
+		// 没装 unit 也没有活进程：本地模式停止后仍能看历史；缓冲为空就是 []，
+		// 不读 journal 残留（unit 没装时的 journal 旧记录不属于当前服务）。
+		return serviceLogsResult{Lines: s.procLog.tail(tail), Truncated: truncated}, nil
 	}
 	tailer, err := s.newLogTailer()
 	if err != nil {
@@ -288,6 +442,7 @@ func (s *Server) serviceLogs(params json.RawMessage) (any, *rpcError) {
 		lines = []string{}
 	}
 	// 服务已经在运行但 IPC 是后启动的：logs 调用本身也把跟随补上。
+	// 本地进程模式不跟 journal，上面已经提前返回。
 	cfg, err := config.Load(s.dataDir)
 	if err == nil && probeServiceState(cfg.Listen, s.probeTimeout) == stateRunning {
 		s.startLogTail()
@@ -391,6 +546,276 @@ func currentBinaryPath() (string, error) {
 		return "", fmt.Errorf("解析二进制路径失败: %w", err)
 	}
 	return abs, nil
+}
+
+// localServiceProcess 是 ipc 托管的 serve 子进程。
+type localServiceProcess struct {
+	cmd  *exec.Cmd
+	pid  int
+	done chan struct{}
+	// exitErr 在 close(done) 之前写入；读取方必须先确认 done 已关闭（<-done 建立 happens-before）。
+	exitErr error
+}
+
+// exited 只反映「Wait 已经返回」；进程刚退出但回收 goroutine 还没跑完时仍算活着，
+// 这样 mode 不会在启动/停止过程中来回跳。
+func (p *localServiceProcess) exited() bool {
+	select {
+	case <-p.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// processLogBuffer 是固定容量的行环形缓冲：内存里只留最近约 2000 行，
+// 进程停止后仍能通过 service.logs 看到历史，但不会无限增长。
+type processLogBuffer struct {
+	mu    sync.Mutex
+	lines [localLogCapacity]string
+	start int
+	count int
+}
+
+func (b *processLogBuffer) add(line string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.count < localLogCapacity {
+		b.lines[(b.start+b.count)%localLogCapacity] = line
+		b.count++
+		return
+	}
+	b.lines[b.start] = line
+	b.start = (b.start + 1) % localLogCapacity
+}
+
+// tail 返回最近 n 行，从旧到新；没有日志时返回空切片而不是 nil。
+func (b *processLogBuffer) tail(n int) []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if n <= 0 || b.count == 0 {
+		return []string{}
+	}
+	if n > b.count {
+		n = b.count
+	}
+	out := make([]string, 0, n)
+	for index := b.count - n; index < b.count; index++ {
+		out = append(out, b.lines[(b.start+index)%localLogCapacity])
+	}
+	return out
+}
+
+func (s *Server) localProcess() *localServiceProcess {
+	s.procMu.Lock()
+	defer s.procMu.Unlock()
+	return s.proc
+}
+
+func (s *Server) localProcessRunning() bool {
+	process := s.localProcess()
+	return process != nil && !process.exited()
+}
+
+// serviceMode 只回答「谁在管」：ipc 托管的子进程优先，其次是已安装的 systemd 用户单元。
+// 与 TCP 探测出的 state 正交，不根据端口通不通反推。
+func (s *Server) serviceMode(installed bool) string {
+	if s.localProcessRunning() {
+		return serviceModeProcess
+	}
+	if installed {
+		return serviceModeSystemd
+	}
+	return serviceModeNone
+}
+
+// startLocalProcess 用当前二进制拉起 `serve --data-dir ... --listen ... --no-browser`。
+// 只负责启动和登记，不等待端口；等待逻辑在 startLocalService，便于 restart 复用。
+func (s *Server) startLocalProcess(cfg config.Config) (*localServiceProcess, error) {
+	binary, err := currentBinaryPath()
+	if err != nil {
+		return nil, err
+	}
+	// listen 必须取 config.Load 的值，不能依赖 serve 的默认参数，否则会和 system.status
+	// 报告的地址不一致。
+	args := []string{
+		"serve",
+		"--data-dir", s.dataDir,
+		"--listen", cfg.Listen,
+		"--no-browser",
+	}
+
+	s.procMu.Lock()
+	defer s.procMu.Unlock()
+	if s.proc != nil {
+		if !s.proc.exited() {
+			return nil, errors.New("本地服务进程已在运行")
+		}
+		// 已经退出的旧进程登记由 start/stop 清理；这里先让位给新进程。
+		s.proc = nil
+	}
+	if s.newProcessCmd == nil {
+		return nil, errors.New("未配置本地进程构造器")
+	}
+	cmd := s.newProcessCmd(binary, args)
+	if cmd == nil {
+		return nil, errors.New("无法创建本地服务进程")
+	}
+	configureLocalProcess(cmd)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("打开本地服务进程输出: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		_ = stdout.Close()
+		return nil, fmt.Errorf("打开本地服务进程错误输出: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		_ = stderr.Close()
+		return nil, fmt.Errorf("启动本地服务进程失败: %w", err)
+	}
+	process := &localServiceProcess{
+		cmd:  cmd,
+		pid:  cmd.Process.Pid,
+		done: make(chan struct{}),
+	}
+	s.proc = process
+	var readers sync.WaitGroup
+	readers.Add(2)
+	go s.consumeProcessOutput(stdout, "stdout", &readers)
+	go s.consumeProcessOutput(stderr, "stderr", &readers)
+	go s.reapLocalProcess(process, &readers)
+	return process, nil
+}
+
+// reapLocalProcess 先等两条输出流读完再 Wait（否则可能丢掉尾部日志），
+// 然后把进程从 Server 上摘掉并唤醒正在等待的 start/stop。
+func (s *Server) reapLocalProcess(process *localServiceProcess, readers *sync.WaitGroup) {
+	readers.Wait()
+	err := process.cmd.Wait()
+	process.exitErr = err
+	// 这里故意不清 s.proc：保留一个「已退出的本地进程」登记，下一次 service.stop 才能
+	// 认出「本地模式已经停了」并返回 stopped，而不是落到 systemd 分支报未安装。
+	// 登记本身很小，startLocalProcess/stopLocalProcess 会负责清掉；mode 仍按活进程判断。
+	close(process.done)
+}
+
+// consumeProcessOutput 逐行读取子进程输出：格式化后进缓冲并发事件，保证快照与增量一致。
+func (s *Server) consumeProcessOutput(r io.Reader, stream string, readers *sync.WaitGroup) {
+	defer readers.Done()
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), MaxLineBytes)
+	for scanner.Scan() {
+		line := formatLocalLogLine(stream, scanner.Text())
+		if line == "" {
+			continue
+		}
+		s.procLog.add(line)
+		s.emitEvent("event.service.log", serviceLogEvent{Line: line, Stream: stream})
+	}
+	if err := scanner.Err(); err != nil {
+		s.logf("读取本地服务输出失败: %v", err)
+	}
+}
+
+// formatLocalLogLine 把子进程输出压成与 journal 快照一致的 `HH:MM:SS LEVEL message`。
+// 多行/空行折叠成一行，空行直接丢弃（不出空日志）。
+//
+// serve 的全部日志都走 slog TextHandler 写 stderr，如果只按流映射，正常启动日志也会被
+// 涂成红色 ERROR。因此先认 slog 的 `level=...` token，命中就按它分级并从消息里删掉该
+// token；没有 token 时才回退到「stdout → INFO、stderr → ERROR」。`time=...` 保留在正文里，
+// 因为它是 serve 自己带的可诊断信息，删掉反而丢上下文。
+func formatLocalLogLine(stream, raw string) string {
+	message := foldJournalMessage(raw)
+	if message == "" {
+		return ""
+	}
+	level, message, found := splitSlogLevel(message)
+	if !found {
+		level = "INFO"
+		if stream == "stderr" {
+			level = "ERROR"
+		}
+	}
+	// 整行只有 level token 时删完就没有正文了；不产出 `HH:MM:SS LEVEL ` 这种空消息。
+	if message == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s %s %s", time.Now().Format("15:04:05"), level, message)
+}
+
+// splitSlogLevel 从 slog TextHandler 风格的 `level=INFO` token 提取级别，并返回去掉
+// 该 token 的正文。值可能被引号包住（level="INFO"）；DEBUG 归到 INFO，避免界面把调试
+// 信息当成故障。没命中时 found=false，由调用方按输出流回退。
+func splitSlogLevel(message string) (level, cleaned string, found bool) {
+	tokens := strings.Split(message, " ")
+	kept := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if !found && strings.HasPrefix(token, "level=") {
+			value := strings.ToUpper(strings.Trim(strings.TrimPrefix(token, "level="), `"'`))
+			switch value {
+			case "DEBUG", "INFO":
+				level = "INFO"
+			case "WARN":
+				level = "WARN"
+			case "ERROR":
+				level = "ERROR"
+			}
+			if level != "" {
+				found = true
+				continue
+			}
+		}
+		kept = append(kept, token)
+	}
+	return level, strings.Join(kept, " "), found
+}
+
+// stopLocalProcess 终止 ipc 托管的 serve：SIGTERM → 最多等 5s → SIGKILL，并清掉登记。
+// 返回错误表示进程没能确认退出，此时保留登记，让 system.status 继续显示 process。
+func (s *Server) stopLocalProcess() error {
+	s.procMu.Lock()
+	process := s.proc
+	s.procMu.Unlock()
+	if process == nil {
+		return nil
+	}
+	if !process.exited() {
+		// 进程可能刚好退出，Signal 返回 os.ErrProcessDone 属正常，不必当错误。
+		if err := terminateLocalProcess(process.cmd); err != nil && !process.exited() {
+			s.logf("向本地服务进程发送终止信号失败: %v", err)
+		}
+		if !waitLocalProcess(process, s.localStopWait()) {
+			if err := process.cmd.Process.Kill(); err != nil && !process.exited() {
+				s.logf("强制结束本地服务进程失败: %v", err)
+			}
+			if !waitLocalProcess(process, localKillTimeout) {
+				return fmt.Errorf(
+					"本地服务进程在 %s 内没有响应 SIGTERM，SIGKILL 后仍未退出",
+					s.localStopWait(),
+				)
+			}
+		}
+	}
+	s.procMu.Lock()
+	if s.proc == process {
+		s.proc = nil
+	}
+	s.procMu.Unlock()
+	return nil
+}
+
+func waitLocalProcess(process *localServiceProcess, timeout time.Duration) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-process.done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func parseLogTail(params json.RawMessage) (int, bool, *rpcError) {

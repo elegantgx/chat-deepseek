@@ -7,6 +7,14 @@
 /** 服务探测三态；`starting` 只出现在 start/restart 的返回里 */
 export type ServiceState = 'running' | 'stopped' | 'starting' | 'unknown'
 
+/**
+ * 服务当前由谁托管，与 TCP 探测的 `state` 正交：
+ * - `process`：ipc 托管着本地 serve 子进程（不装 systemd 的默认形态）；
+ * - `systemd`：没有本地子进程，但 systemd 用户单元已安装（单元可能运行也可能停止）；
+ * - `none`：既没有本地子进程，也没有安装的单元。
+ */
+export type ServiceMode = 'systemd' | 'process' | 'none'
+
 export interface SystemStatus {
   version: string
   dataDir: string
@@ -14,6 +22,8 @@ export interface SystemStatus {
     state: ServiceState
     listen: string
     source: 'probe'
+    /** 管理方式；`state` 是端口探测结果，两者不能互相推断 */
+    mode: ServiceMode
     /** systemd 用户单元是否已安装；不可用平台恒为 false */
     installed: boolean
     /** 当前平台是否有可用的 systemd 用户管理器 */

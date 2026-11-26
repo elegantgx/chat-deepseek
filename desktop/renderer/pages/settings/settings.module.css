@@ -1,11 +1,68 @@
 /* 设置页：分组标题在卡片外、行内标签在左、控件在右（对齐 04-settings 的 macOS 系统设置式）。 */
 
+/*
+ * Chromium 不会给 ::-webkit-scrollbar-thumb 的 background-color 做过渡，
+ * 先把透明度放进可动画的自定义属性，再让拇指颜色引用它，才能真的淡出。
+ */
+@property --settings-scrollbar-alpha {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 .settings {
+  --settings-scrollbar-alpha: 0;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  /*
+   * Chromium 的经典滚动条会在出现/消失时挤动内容；先固定占住槽位，
+   * 这样滚动条只在滚动时显隐，卡片宽度不会左右跳。
+   */
+  scrollbar-gutter: stable;
+  transition: --settings-scrollbar-alpha 200ms ease;
+}
+
+.settings.scrolling {
+  --settings-scrollbar-alpha: 1;
+}
+
+/* 默认不画拇指和轨道：页面静止时只剩预留的空白槽，不出现一条灰沟。 */
+.settings::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.settings::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 老式滚动条的上下箭头不参与这套「按需出现」的观感，直接收起。 */
+.settings::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/*
+ * 拇指本身始终存在、只是透明：滚动时 .scrolling 把上面的可动画属性推到 1，
+ * 静止后归 0，颜色跟着变淡；不要直接写 background-color 过渡，Chromium 不生效。
+ */
+.settings::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--r-6);
+  background-color: color-mix(
+    in srgb,
+    var(--line-strong) calc(var(--settings-scrollbar-alpha) * 100%),
+    transparent
+  );
+  background-clip: content-box;
+}
+
+.settings.scrolling::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-3);
 }
 
 .group + .group {
@@ -142,6 +199,33 @@
   color: var(--text-2);
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+/* 管理方式回答「谁来托管」，不是代码或路径，所以不套等宽字体。 */
+.modeValue {
+  min-width: 0;
+  margin-left: auto;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-2);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 安装在本地运行模式里是可选项：说明放行下，字号和颜色都降一档，
+ * 免得「安装为系统服务」看起来像启动服务的前置条件。
+ */
+.serviceNote {
+  margin: 0;
+  padding: 0 var(--sp-20) var(--sp-12);
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}
+
+.serviceWarn {
+  color: var(--warning-ink);
 }
 
 /* 数据目录的说明在行下方整行排；保存后未重启时把「待生效」提到最前。 */

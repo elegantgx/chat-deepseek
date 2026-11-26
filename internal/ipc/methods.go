@@ -57,6 +57,9 @@ type serviceInfo struct {
 	// 探测只能说明端口通不通，分不出「没装」和「装了但停了」。
 	Installed bool `json:"installed"`
 	Supported bool `json:"supported"`
+	// Mode 回答「谁在管」：ipc 托管的本地子进程（process）、已安装的 systemd 用户单元
+	// （systemd），或两者都没有（none）。它与 State 正交，State 只回答端口通不通。
+	Mode string `json:"mode"`
 }
 
 type statusResult struct {
@@ -131,6 +134,7 @@ func (s *Server) systemStatus() (any, *rpcError) {
 			Source:    "probe",
 			Installed: installed,
 			Supported: supported,
+			Mode:      s.serviceMode(installed),
 		},
 	}, nil
 }

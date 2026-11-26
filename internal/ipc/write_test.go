@@ -115,6 +115,12 @@ func (f *fakeServiceController) counts() (int, int, int) {
 }
 
 func useFakeService(server *Server, fake serviceController) {
+	// 这些用例验证的是 systemd 分支；fake 默认投影成「平台支持且 unit 已安装」，
+	// 否则 service.start 会按新逻辑退回本地进程模式，真的去 spawn serve。
+	// 本地进程模式的用例在 service_local_test.go 里显式使用未安装的 fake。
+	if concrete, ok := fake.(*fakeServiceController); ok && !concrete.status.Installed {
+		concrete.status = service.Status{Supported: true, Installed: true}
+	}
 	server.newService = func() serviceController { return fake }
 	// 服务方法测试不依赖本机 journald；跟随源用空实现。
 	server.newLogTailer = func() (logTailer, error) { return &fakeLogTailer{}, nil }
