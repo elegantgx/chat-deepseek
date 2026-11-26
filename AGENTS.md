@@ -92,6 +92,8 @@ gui/                         Python/PySide6 管理界面（.venv 不提交）
   tests/test_theme.py         主题检测测试
   requirements.txt
   README.md
+  REFACTOR_PLAN.md            GUI 大重构方案（分页、领域模型、迁移顺序；未实施）
+  BEHAVIOR_BASELINE.md        重构验收行为基线（入口映射、状态矩阵、远端差异、待修不一致）
   .gitignore                 忽略 .venv / __pycache__
 cmd/chat-deepseek/            Go CLI 入口（v1 服务端，见 §13）
 internal/
