@@ -1,12 +1,13 @@
 // Package ipc 实现桌面端使用的本地控制面：stdio + NDJSON 的 JSON-RPC 2.0 形状。
 //
-// 它是只读的机器接口，供 GUI/Android 外壳读取服务状态与配置，避免解析 CLI 中文输出。
-// stdout 只写协议行，日志一律写 stderr。
+// 它供 GUI/Android 外壳读取服务状态与配置、执行备份和服务启停，避免解析 CLI 中文输出。
+// stdout 只写协议行（响应和事件），日志一律写 stderr。
 package ipc
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +51,24 @@ type Server struct {
 
 	methods     map[string]methodSpec
 	methodOrder []string
+
+	// serviceOp 是容量 1 的信号量：启停/重启必须串行，第二个并发请求立即失败，
+	// 避免 GUI 双击按钮同时拉起两个进程。这里不用阻塞锁，否则两个 start 会先后都成功。
+	serviceOp chan struct{}
+	// backupOp 串行化备份创建/恢复/删除，避免同名归档互相覆盖。
+	backupOp sync.Mutex
+
+	// 测试可替换；生产分别落到 internal/service 与 journalctl。
+	newService   func() serviceController
+	newLogTailer func() (logTailer, error)
+
+	writerMu sync.Mutex
+	writer   *protocolWriter
+
+	tailMu     sync.Mutex
+	tailCancel context.CancelFunc
+	tailDone   chan struct{}
+	tailID     int
 }
 
 // New 创建控制面服务。stderr 为 nil 时丢弃日志；dataDir 会被解析成绝对路径。
@@ -70,6 +89,9 @@ func New(dataDir string, stderr io.Writer) (*Server, error) {
 		probeTimeout: defaultProbeTimeout,
 		logger:       log.New(stderr, "ipc: ", 0),
 		methods:      make(map[string]methodSpec),
+		serviceOp:    make(chan struct{}, 1),
+		newService:   func() serviceController { return newSystemdController() },
+		newLogTailer: newJournalTailer,
 	}
 	for _, spec := range methodTable() {
 		s.methods[spec.name] = spec
@@ -78,7 +100,7 @@ func New(dataDir string, stderr io.Writer) (*Server, error) {
 	return s, nil
 }
 
-// request 只解析信封字段；params 在 v1 里不参与业务，保留给后续版本。
+// request 只解析信封字段；params 交给具体方法按需解析，未知字段一律忽略。
 type request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -103,6 +125,13 @@ type errorResponse struct {
 	Error   rpcError        `json:"error"`
 }
 
+// eventNotification 是服务端主动推送的事件：JSON-RPC 2.0 notification，没有 id。
+type eventNotification struct {
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
+}
+
 // protocolWriter 串行化 stdout 写入：一行一个 JSON，写完立即 flush。
 type protocolWriter struct {
 	mu  sync.Mutex
@@ -120,6 +149,10 @@ func (w *protocolWriter) writeError(id json.RawMessage, code, message string) {
 		ID:      id,
 		Error:   rpcError{Code: code, Message: message},
 	})
+}
+
+func (w *protocolWriter) writeEvent(method string, params any) {
+	w.write(eventNotification{JSONRPC: "2.0", Method: method, Params: params})
 }
 
 func (w *protocolWriter) write(value any) {
@@ -155,6 +188,12 @@ func (w *protocolWriter) Err() error {
 func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	reader := bufio.NewReaderSize(in, 64*1024)
 	writer := &protocolWriter{out: bufio.NewWriter(out)}
+	s.setWriter(writer)
+	defer func() {
+		// 先停事件流再摘掉 writer，避免 Serve 返回后 tail goroutine 还往旧 writer 写。
+		s.stopLogTail()
+		s.setWriter(nil)
+	}()
 	var wg sync.WaitGroup
 	for {
 		line, err := readLine(reader)
@@ -208,7 +247,7 @@ func (s *Server) handle(writer *protocolWriter, payload []byte) {
 		s.fail(writer, req.ID, notification, codeNotFound, fmt.Sprintf("未知方法 %q", clip(req.Method, 80)))
 		return
 	}
-	result, rpcErr := spec.handle(s)
+	result, rpcErr := spec.handle(s, req.Params)
 	if rpcErr != nil {
 		s.fail(writer, req.ID, notification, rpcErr.Code, rpcErr.Message)
 		return
@@ -229,6 +268,37 @@ func (s *Server) logf(format string, args ...any) {
 	if s.logger != nil {
 		s.logger.Printf(format, args...)
 	}
+}
+
+// setWriter 绑定本次 Serve 的 stdout 写入器；Serve 结束时会恢复为 nil。
+func (s *Server) setWriter(writer *protocolWriter) {
+	s.writerMu.Lock()
+	s.writer = writer
+	s.writerMu.Unlock()
+}
+
+// emitEvent 往当前 stdout 写一行事件。和响应共用 protocolWriter 的锁，
+// 因此不会出现半行事件插进响应的情况。
+func (s *Server) emitEvent(method string, params any) {
+	s.writerMu.Lock()
+	writer := s.writer
+	s.writerMu.Unlock()
+	if writer == nil {
+		return
+	}
+	writer.writeEvent(method, params)
+}
+
+func badRequestError(message string) *rpcError {
+	return &rpcError{Code: codeBadRequest, Message: message}
+}
+
+func notFoundError(message string) *rpcError {
+	return &rpcError{Code: codeNotFound, Message: message}
+}
+
+func unavailableError(message string) *rpcError {
+	return &rpcError{Code: codeUnavailable, Message: message}
 }
 
 // readLine 读取一行，最多 MaxLineBytes；超长时丢弃本行剩余内容并返回 errLineTooLong。

@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"encoding/json"
 	"runtime"
 	"time"
 
@@ -11,15 +12,29 @@ import (
 // methodSpec 把一个方法名绑定到处理函数；methodTable 的顺序就是 capabilities 的顺序。
 type methodSpec struct {
 	name   string
-	handle func(*Server) (any, *rpcError)
+	handle func(*Server, json.RawMessage) (any, *rpcError)
+}
+
+// noParams 适配不需要参数的只读方法，保留它们原来的无参签名，便于直接调用与测试。
+func noParams(handle func(*Server) (any, *rpcError)) func(*Server, json.RawMessage) (any, *rpcError) {
+	return func(server *Server, _ json.RawMessage) (any, *rpcError) {
+		return handle(server)
+	}
 }
 
 func methodTable() []methodSpec {
 	return []methodSpec{
-		{name: "system.status", handle: (*Server).systemStatus},
-		{name: "system.capabilities", handle: (*Server).systemCapabilities},
-		{name: "config.get", handle: (*Server).configGet},
-		{name: "backup.list", handle: (*Server).backupList},
+		{name: "system.status", handle: noParams((*Server).systemStatus)},
+		{name: "system.capabilities", handle: noParams((*Server).systemCapabilities)},
+		{name: "config.get", handle: noParams((*Server).configGet)},
+		{name: "backup.list", handle: noParams((*Server).backupList)},
+		{name: "backup.create", handle: (*Server).backupCreate},
+		{name: "backup.restore", handle: (*Server).backupRestore},
+		{name: "backup.delete", handle: (*Server).backupDelete},
+		{name: "service.start", handle: (*Server).serviceStart},
+		{name: "service.stop", handle: (*Server).serviceStop},
+		{name: "service.restart", handle: (*Server).serviceRestart},
+		{name: "service.logs", handle: (*Server).serviceLogs},
 	}
 }
 
@@ -39,6 +54,9 @@ type capabilitiesFeatures struct {
 	Systemd   bool `json:"systemd"`
 	SSH       bool `json:"ssh"`
 	Autostart bool `json:"autostart"`
+	// Backup/Service 表示本版控制面已注册对应写方法；systemd 是否可用仍由独立开关表达。
+	Backup  bool `json:"backup"`
+	Service bool `json:"service"`
 }
 
 type capabilitiesResult struct {
@@ -95,6 +113,10 @@ func (s *Server) systemCapabilities() (any, *rpcError) {
 			Systemd:   false,
 			SSH:       false,
 			Autostart: false,
+			// backup/service 方法已经可用，但 service 的底层仍依赖当前平台的 systemd；
+			// 不可用时方法会返回结构化 unavailable，而不是假装成功。
+			Backup:  true,
+			Service: true,
 		},
 		IPCVersion: IPCVersion,
 	}, nil

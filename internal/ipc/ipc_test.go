@@ -157,7 +157,10 @@ func TestServeReadOnlyMethods(t *testing.T) {
 		}
 	}
 	if caps.Features.Systemd || caps.Features.SSH || caps.Features.Autostart {
-		t.Errorf("v1 的 features 应全部为 false: %+v", caps.Features)
+		t.Errorf("systemd/ssh/autostart 应保持 false: %+v", caps.Features)
+	}
+	if !caps.Features.Backup || !caps.Features.Service {
+		t.Errorf("backup/service 特性应为 true: %+v", caps.Features)
 	}
 
 	var cfg configResult
@@ -283,7 +286,19 @@ func TestCapabilitiesMatchesRegistry(t *testing.T) {
 		t.Fatalf("capabilities: %+v", rpcErr)
 	}
 	caps := value.(capabilitiesResult)
-	expected := []string{"system.status", "system.capabilities", "config.get", "backup.list"}
+	expected := []string{
+		"system.status",
+		"system.capabilities",
+		"config.get",
+		"backup.list",
+		"backup.create",
+		"backup.restore",
+		"backup.delete",
+		"service.start",
+		"service.stop",
+		"service.restart",
+		"service.logs",
+	}
 	if len(caps.Methods) != len(expected) {
 		t.Fatalf("methods=%v，期望 %v", caps.Methods, expected)
 	}
