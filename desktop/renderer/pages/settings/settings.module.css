@@ -1,0 +1,144 @@
+/* 设置页：分组标题在卡片外、行内标签在左、控件在右（对齐 04-settings 的 macOS 系统设置式）。 */
+
+.settings {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.group + .group {
+  margin-top: var(--sp-24);
+}
+
+.groupLabel {
+  margin: 0 0 var(--sp-8) var(--sp-4);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-semibold);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+/*
+ * Field 本来是「标签在上、输入框在下」；设置页要用 04 的行式布局，
+ * 所以把 Field 的根节点改成两列网格：标签占左列，输入框和错误文案占右列。
+ * 不复制输入框：焦点环、只读态、aria 关联都还由 Field 提供。
+ */
+.fieldRow.fieldRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: center;
+  column-gap: var(--sp-24);
+  row-gap: var(--sp-4);
+  min-height: 44px;
+  padding: var(--sp-6) var(--sp-20);
+  border-top: 1px solid var(--line);
+}
+
+.fieldRow.fieldRow:first-child {
+  border-top: 0;
+}
+
+.fieldRow.fieldRow > label {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.fieldRow.fieldRow > input {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+}
+
+.fieldRow.fieldRow > p {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 0;
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-24);
+  min-height: 44px;
+  padding: 0 var(--sp-20);
+  border-top: 1px solid var(--line);
+}
+
+.settingRow:first-child {
+  border-top: 0;
+}
+
+.settingLabel {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.settingControl {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.stacked {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-6);
+}
+
+.themeRow {
+  padding-top: var(--sp-8);
+  padding-bottom: var(--sp-8);
+}
+
+.note {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.monoValue {
+  min-width: 0;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-2);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.dialogNote {
+  margin: var(--sp-10) 0 0;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--text-2);
+}
+
+/*
+ * 深色首帧截图时，主题切换和按钮 0.12s 的底色过渡会赛跑，禁用态会短暂保留浅色残影。
+ * 禁用态本来就没有交互反馈需要过渡，这里单独关掉。
+ */
+.saveButton.saveButton:disabled {
+  transition: none;
+}
+
+/* Toast 是玻璃浮层；组件不接管定位与定时器，页面把它钉在右下。 */
+.toastLayer {
+  position: fixed;
+  right: var(--page-x);
+  bottom: var(--sp-28);
+  z-index: 60;
+  display: flex;
+}
