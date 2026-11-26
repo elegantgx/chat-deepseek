@@ -42,6 +42,34 @@
   box-shadow: 0 0 0 4px var(--hover);
 }
 
+/* starting 还没有探测结果：用和 stopped 同款的中性色，不暗示成功或失败 */
+.dotStarting {
+  background: var(--text-3);
+  box-shadow: 0 0 0 4px var(--hover);
+}
+
+/* 状态读取失败：整块换成错误说明 + 重试，右侧元信息同时留空 */
+.statusError {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-6);
+  min-width: 240px;
+  max-width: 520px;
+}
+
+.statusErrorIcon {
+  flex: none;
+  color: var(--danger-ink);
+}
+
+.statusErrorText {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--danger-ink);
+  overflow-wrap: anywhere;
+}
+
 .statusWord {
   font-size: var(--fs-22);
   line-height: var(--lh-22);
@@ -101,4 +129,20 @@
 .logArea {
   flex: 1;
   min-height: 0;
+}
+
+/* 读失败时占住日志卡的内容区，和 LogPane 的高度算法共用 LOG_CARD_CHROME */
+.errorBody {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0 var(--sp-20);
+}
+
+.toast {
+  position: fixed;
+  right: var(--page-x);
+  bottom: var(--sp-24);
+  z-index: 60;
+  max-width: min(520px, calc(100vw - var(--page-x) * 2));
 }
