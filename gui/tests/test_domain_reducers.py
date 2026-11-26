@@ -340,6 +340,30 @@ class TaskAndPromptTest(ReducerInvariantMixin):
         self.assertIsNone(dismissed.notice)
         self.assert_valid(before, raised, replaced, dismissed)
 
+    def test_notice_defaults_to_toast(self) -> None:
+        notice = Notice("完成")
+        self.assertEqual(notice.title, "")
+        self.assertFalse(notice.dialog)
+        state = reducers.notice_raised(base(), notice)
+        self.assertIs(state.notice, notice)
+        self.assertEqual(state.notice.title, "")
+        self.assertFalse(state.notice.dialog)
+
+    def test_notice_preserves_title_and_dialog(self) -> None:
+        notice = Notice(
+            "保存失败",
+            NoticeTone.ERROR,
+            "raw output",
+            title="无法保存设置",
+            dialog=True,
+        )
+        state = reducers.notice_raised(base(), notice)
+        self.assertIs(state.notice, notice)
+        self.assertEqual(state.notice.title, "无法保存设置")
+        self.assertTrue(state.notice.dialog)
+        self.assertEqual(state.notice.text, "保存失败")
+        self.assertEqual(state.notice.details, "raw output")
+
 
 class ForegroundTest(ReducerInvariantMixin):
     def test_foreground_lifecycle(self) -> None:

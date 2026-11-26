@@ -61,11 +61,17 @@ class NoticeTone(StrEnum):
 
 @dataclass(frozen=True)
 class Notice:
-    """一次性的用户提示；由 controller 在渲染后清掉。"""
+    """一次性的用户提示；由 controller 在渲染后清掉。
+
+    `title` 为空时按单段 toast 显示；`dialog=True` 时走 MessageDialog，
+    `text` 同时是正文/说明，`details` 是可选的原始输出。
+    """
 
     text: str
     tone: NoticeTone = NoticeTone.INFO
     details: str = ""
+    title: str = ""
+    dialog: bool = False
 
 
 @dataclass(frozen=True)
