@@ -113,11 +113,8 @@ function seedAccounts(): AccountRow[] {
 const GROUP_ORDER: AccountGroup[] = ['User', 'Admin', 'Owner']
 
 function normalizeGroups(value: unknown): AccountGroup[] {
-  if (value === undefined) {
-    return ['User']
-  }
   if (!Array.isArray(value)) {
-    fail('bad_request', '参数必须是 JSON 对象且 groups 是数组')
+    fail('bad_request', 'groups 必须是数组')
   }
   const groups: AccountGroup[] = []
   for (const item of value) {
@@ -152,6 +149,16 @@ function requireString(value: unknown, field: string): string {
   return value
 }
 
+/** 契约按 UTF-8 字节数限制密码：中文一个字符占 3 字节 */
+function passwordBytes(value: string): number {
+  return new TextEncoder().encode(value).length
+}
+
+/** backupDir 契约：空表示回落默认目录，非空必须是绝对路径（POSIX 或 Windows 盘符） */
+function isAbsolutePath(value: string): boolean {
+  return /^(?:\/|[A-Za-z]:[\\/])/.test(value)
+}
+
 function highestGroup(groups: AccountGroup[]): AccountGroup {
   let best: AccountGroup = 'User'
   for (const group of groups) {
@@ -164,7 +171,9 @@ function highestGroup(groups: AccountGroup[]): AccountGroup {
 
 interface MockState {
   running: boolean
+  starting: boolean
   pid: number
+  startTimer: number | null
   installed: boolean
   unitPath: string
   config: ConfigProjection
@@ -174,13 +183,19 @@ interface MockState {
   logs: string[]
 }
 
-/** hash 里的后缀只影响替身：`-off` 让服务初始为已停止、`empty` 清空备份、`login` 未登录 */
-function hashFlags(): { running: boolean; emptyBackups: boolean; signedOut: boolean } {
+/** hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、`statuserr` 状态读失败 */
+function hashFlags(): {
+  running: boolean
+  emptyBackups: boolean
+  signedOut: boolean
+  statusError: boolean
+} {
   const raw = window.location.hash.replace(/^#\/?/, '')
   return {
     running: !/(^|-)off($|-)/.test(raw),
     emptyBackups: /(^|-)empty($|-)/.test(raw),
     signedOut: /(^|-)login($|-)/.test(raw),
+    statusError: /(^|-)statuserr($|-)/.test(raw),
   }
 }
 
@@ -189,7 +204,9 @@ export function createMockHost(): HostClient {
   const flags = hashFlags()
   const state: MockState = {
     running: flags.running,
+    starting: false,
     pid: 4821,
+    startTimer: null,
     installed: true,
     unitPath: '~/.config/systemd/user/chat-deepseek.service',
     config: {
@@ -238,7 +255,7 @@ export function createMockHost(): HostClient {
     version: state.config.version,
     dataDir: state.config.dataDir,
     service: {
-      state: state.running ? 'running' : 'stopped',
+      state: state.starting ? 'starting' : state.running ? 'running' : 'stopped',
       listen: state.config.listen,
       source: 'probe',
     },
@@ -270,8 +287,30 @@ export function createMockHost(): HostClient {
     emit('event.service.log', event)
   }
 
+  /** 替身自己的 900ms 定时器：systemctl 返回时端口还没起来，和真后端一样先给 starting */
+  const beginStarting = (logLines: readonly string[]) => {
+    if (state.startTimer !== null) {
+      window.clearTimeout(state.startTimer)
+    }
+    state.starting = true
+    for (const line of logLines) {
+      appendLog(line)
+    }
+    state.startTimer = window.setTimeout(() => {
+      state.startTimer = null
+      state.starting = false
+      state.running = true
+      appendLog('serve listening on ' + state.config.listen)
+    }, 900)
+  }
+
   const handlers: Record<string, (params: unknown) => unknown> = {
-    'system.status': () => status(),
+    'system.status': () => {
+      if (flags.statusError) {
+        fail('unavailable', '无法读取服务状态：探测超时')
+      }
+      return status()
+    },
     'system.capabilities': () => ({
       platform: 'linux',
       methods: [
@@ -308,21 +347,41 @@ export function createMockHost(): HostClient {
     'config.get': () => ({ ...state.config }),
     'config.set': (params) => {
       const payload = requireObject(params)
+      let provided = false
       for (const field of ['listen', 'backupDir', 'apiOrigin'] as const) {
-        const value = payload[field]
-        if (value === undefined) {
+        const raw = payload[field]
+        if (raw === undefined) {
           continue
         }
-        if (typeof value !== 'string' || value.trim() === '') {
+        provided = true
+        if (typeof raw !== 'string') {
+          fail('bad_request', `${field} 必须是字符串`)
+        }
+        const value = raw.trim()
+        if (field === 'backupDir') {
+          // 空字符串表示清除配置，回落到 <dataDir>/backups；非空只接受绝对路径
+          if (value === '') {
+            state.config.backupDir = `${state.config.dataDir}/backups`
+          } else if (!isAbsolutePath(value)) {
+            fail('bad_request', 'backupDir 必须是绝对路径')
+          } else {
+            state.config.backupDir = value
+          }
+          continue
+        }
+        if (value === '') {
           fail('bad_request', `${field} 不能为空`)
         }
         state.config[field] = value
+      }
+      if (!provided) {
+        fail('bad_request', '至少提供一个配置项：listen、backupDir、apiOrigin')
       }
       return { ...state.config }
     },
     'backup.list': () => listBackups(),
     'backup.create': () => {
-      if (state.running) {
+      if (state.running || state.starting) {
         fail('unavailable', '服务运行中，备份已暂停')
       }
       const when = new Date()
@@ -339,7 +398,7 @@ export function createMockHost(): HostClient {
     },
     'backup.restore': (params) => {
       const file = requireString(requireObject(params).file, 'file')
-      if (state.running) {
+      if (state.running || state.starting) {
         fail('unavailable', '服务运行中，恢复已暂停')
       }
       if (!state.backups.some((entry) => entry.file === file)) {
@@ -361,6 +420,9 @@ export function createMockHost(): HostClient {
       return { ok: true }
     },
     'service.start': () => {
+      if (state.starting) {
+        fail('unavailable', '服务操作正在进行，请稍候')
+      }
       if (state.running) {
         return {
           state: 'running',
@@ -368,16 +430,17 @@ export function createMockHost(): HostClient {
           listen: state.config.listen,
         } satisfies ServiceStartResult
       }
-      state.running = true
-      appendLog('serve listening on ' + state.config.listen)
-      appendLog('database opened: data/chat.db (journal=wal)')
+      beginStarting(['Started chat-deepseek.service.'])
       return {
-        state: 'running',
-        pid: state.pid,
+        state: 'starting',
+        pid: 0,
         listen: state.config.listen,
       } satisfies ServiceStartResult
     },
     'service.stop': () => {
+      if (state.starting) {
+        fail('unavailable', '服务操作正在进行，请稍候')
+      }
       if (!state.running) {
         fail('unavailable', '服务未运行')
       }
@@ -387,13 +450,13 @@ export function createMockHost(): HostClient {
       return { state: 'stopped' } satisfies ServiceStopResult
     },
     'service.restart': () => {
-      state.running = true
-      appendLog('Stopping chat-deepseek.service…')
-      appendLog('Started chat-deepseek.service.')
-      appendLog('serve listening on ' + state.config.listen)
+      if (state.starting) {
+        fail('unavailable', '服务操作正在进行，请稍候')
+      }
+      beginStarting(['Stopping chat-deepseek.service…', 'Started chat-deepseek.service.'])
       return {
-        state: 'running',
-        pid: state.pid,
+        state: 'starting',
+        pid: 0,
         listen: state.config.listen,
       } satisfies ServiceStartResult
     },
@@ -423,7 +486,12 @@ export function createMockHost(): HostClient {
       if (!state.installed) {
         fail('unavailable', '服务未安装')
       }
+      if (state.startTimer !== null) {
+        window.clearTimeout(state.startTimer)
+        state.startTimer = null
+      }
       state.installed = false
+      state.starting = false
       state.running = false
       return { ok: true }
     },
@@ -432,7 +500,7 @@ export function createMockHost(): HostClient {
       const payload = requireObject(params)
       const username = requireString(payload.username, 'username')
       const password = requireString(payload.password, 'password')
-      if (!state.accounts.some((row) => row.username === username) || password.length < 8) {
+      if (!state.accounts.some((row) => row.username === username) || passwordBytes(password) < 8) {
         fail('unauthenticated', '用户名或密码错误')
       }
       const account = state.accounts.find((row) => row.username === username)
@@ -463,15 +531,24 @@ export function createMockHost(): HostClient {
       if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
         fail('bad_request', '用户名需为 1-64 个字母、数字或 . _ -')
       }
-      if (password.length < 8) {
+      if (passwordBytes(password) < 8) {
         fail('bad_request', '密码至少 8 位')
       }
       if (state.accounts.some((row) => row.username === username)) {
         fail('conflict', `用户名已存在：${username}`)
       }
-      const groups = normalizeGroups(payload.groups)
-      if (groups.length > 1) {
-        requireGroup('Owner')
+      // 契约：省略或空数组默认 User；只要显式指定了非空 groups 就需要 Owner
+      let groups: AccountGroup[] = ['User']
+      if (payload.groups !== undefined) {
+        if (!Array.isArray(payload.groups)) {
+          fail('bad_request', 'groups 必须是数组')
+        }
+        if (payload.groups.length > 0) {
+          groups = normalizeGroups(payload.groups)
+          if (highestGroup(requireAuth().groups ?? ['User']) !== 'Owner') {
+            fail('permission_denied', '只有 Owner 可以指定组；Admin 只能创建普通 User')
+          }
+        }
       }
       state.accounts.push({
         id: `acc_${username}`,
@@ -488,7 +565,7 @@ export function createMockHost(): HostClient {
       const payload = requireObject(params)
       const username = requireString(payload.username, 'username')
       const password = requireString(payload.password, 'password')
-      if (password.length < 8) {
+      if (passwordBytes(password) < 8) {
         fail('bad_request', '密码至少 8 位')
       }
       if (!state.accounts.some((row) => row.username === username)) {
