@@ -25,6 +25,7 @@ from typing import Callable, Sequence
 
 import gui_config
 import parsing
+import service_plan
 
 from .domain import commands, reducers, rules
 from .domain.facts import ForegroundPhase, ForegroundSession, HostConfig
@@ -50,7 +51,7 @@ from .infra.persistence import GuiConfigRepository
 from .infra.runner import CancelToken, CommandRunner, QueuePump
 from .infra.serve import ServeHandle
 from .infra.ssh import TRANSPORT_EXIT
-from .infra.transport import Transport
+from .infra.transport import SshTransport, Transport
 from .store import Store
 
 BUSY_TEXT = "正在执行上一条命令"
@@ -121,6 +122,21 @@ class Controller:
     @property
     def state(self) -> AppState:
         return self._store.state
+
+    @property
+    def config(self) -> gui_config.Config:
+        """controller 当前持有的完整 GUI 配置（local + ssh 两段都可用）。"""
+        return self._config
+
+    @property
+    def service_user(self) -> str:
+        """安装/linger 命令展示用的用户名；远端未连接时为空串。"""
+        if not self._store.state.target.remote:
+            return service_plan.current_user()
+        transport = self._transport
+        if isinstance(transport, SshTransport):
+            return transport.remote_user or ""
+        return ""
 
     @property
     def pump(self) -> QueuePump:

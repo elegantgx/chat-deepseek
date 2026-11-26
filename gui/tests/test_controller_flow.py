@@ -36,6 +36,7 @@ from cdgui.infra.process import (
     CommandResult,
 )
 from cdgui.infra.runner import QueuePump
+from cdgui.infra.transport import SshTransport
 
 FIXED_NOW = datetime(2026, 11, 26, 19, 0, 0)
 
@@ -1440,6 +1441,35 @@ class MiscTest(ControllerTestCase):
         self.assertIs(controller.state.page, PageId.ACCOUNTS)
         controller.dismiss_notice()
         self.assertIsNone(controller.state.notice)
+
+    def test_config_reflects_latest_saved_username(self) -> None:
+        transport = FakeTransport(self.target)
+        self.script_login(transport)
+        config = gui_config.Config(
+            connection="local",
+            local=gui_config.LocalConfig(
+                binary_dir="/opt", data_dir="/data", username="old"
+            ),
+            ssh=gui_config.SshConfig(
+                host="nas", binary_dir="/opt", data_dir="", username="nasuser"
+            ),
+        )
+        controller = self.make_controller(transport=transport, config=config)
+        controller.login("alice", "pw")
+        self.drain()
+
+        self.assertEqual(controller.config.local.username, "alice")
+        self.assertEqual(controller.config.ssh.username, "nasuser")
+        self.assertEqual(gui_config.load(self.config_path).local.username, "alice")
+
+    def test_service_user_is_empty_until_remote_connected(self) -> None:
+        target = remote_target()
+        transport = SshTransport(target, program="ssh")
+        controller = self.make_controller(transport=transport, target=target)
+
+        self.assertEqual(controller.service_user, "")
+        transport.session.remote_user = "nasuser"
+        self.assertEqual(controller.service_user, "nasuser")
 
     def test_apply_target_remote_writes_ssh_config(self) -> None:
         endpoint = Endpoint(
