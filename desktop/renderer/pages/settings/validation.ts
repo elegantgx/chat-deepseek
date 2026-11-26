@@ -72,14 +72,17 @@ export function validateApiOrigin(value: string): string | undefined {
   return undefined
 }
 
-/** 备份目录允许绝对路径或以 ~/ 开头；空值会让服务回落到数据目录，界面上视为未填写。 */
+/**
+ * 备份目录按契约必须是绝对路径；空字符串合法，表示清除配置、回落到默认目录。
+ * 接受 POSIX 的 `/...` 与 Windows 的 `C:\...` / `C:/...`；拒绝 `~/` 和相对路径。
+ */
 export function validateBackupDir(value: string): string | undefined {
   const trimmed = value.trim()
   if (!trimmed) {
-    return '备份目录不能为空'
+    return undefined
   }
-  if (!/^(~\/|\/|[A-Za-z]:[\\/])/.test(trimmed)) {
-    return '请填写绝对路径，或以 ~/ 开头'
+  if (!/^(?:\/|[A-Za-z]:[\\/])/.test(trimmed)) {
+    return '备份目录需要绝对路径，留空使用默认目录'
   }
   return undefined
 }
