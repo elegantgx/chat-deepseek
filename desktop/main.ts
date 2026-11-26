@@ -25,20 +25,57 @@ if (
   app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
 }
 
-// 容器和部分虚拟机没有 /dev/dri：GPU 进程会反复崩溃，Chromium 最后直接
-// "GPU process isn't usable. Goodbye." 并 SIGTRAP，窗口根本出不来。
-// 这种环境没有硬件合成可用，先关掉硬件加速，让软件合成把窗口画出来；
-// 正常的 Linux 桌面都有 /dev/dri，不受影响。
-if (process.platform === 'linux' && !fs.existsSync('/dev/dri')) {
-  console.warn('[gpu] 没有 /dev/dri，改用软件合成')
+// 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
+// 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。
+app.setName('chat-deepseek')
+
+// 软件合成的三条触发路径：没有 /dev/dri（容器、部分虚拟机）、上次 GPU 崩溃留下的
+// 标记、显式 --disable-gpu。Chromium 的 GPU 进程崩到第三次会直接
+// "GPU process isn't usable. Goodbye." 并 SIGTRAP，窗口根本出不来，所以先关掉它。
+// CHAT_DEEPSEEK_GPU=on 可以清掉标记、强制走硬件加速（排障用）。
+const forceGPU = process.env.CHAT_DEEPSEEK_GPU === 'on'
+const gpuMarker = path.join(app.getPath('userData'), 'gpu-software')
+// 兜底重启的子进程会继承 CHAT_DEEPSEEK_GPU=on，但它自己带 --disable-gpu，
+// 这时候不能再把标记删掉，否则又会回到崩溃的硬件路径。
+if (forceGPU && !process.argv.includes('--disable-gpu')) {
+  try {
+    fs.rmSync(gpuMarker, { force: true })
+  } catch {
+    // 清不掉也不影响启动，最多还是走软件合成
+  }
+}
+const noDri = process.platform === 'linux' && !fs.existsSync('/dev/dri')
+const softwareRendering =
+  !forceGPU && (noDri || process.argv.includes('--disable-gpu') || fs.existsSync(gpuMarker))
+if (softwareRendering) {
+  console.warn('[gpu] 改用软件合成')
   // 只调 disableHardwareAcceleration() 不够：GPU 进程仍会起来并 SIGSEGV，
   // 必须让 Chromium 根本不启动它。
   app.commandLine.appendSwitch('disable-gpu')
 }
 
-// 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
-// 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。
-app.setName('chat-deepseek')
+/**
+ * 有 /dev/dri 但驱动或沙箱不让用时，也一样会崩。第一次收到 GPU 崩溃先落一个标记，
+ * 再带 --disable-gpu 重启一次：即便这次重启被 FATAL 抢先打断，下次手工启动也会
+ * 直接走软件合成，不会一直崩。
+ */
+let gpuFallbackTriggered = false
+app.on('child-process-gone', (_event, details) => {
+  if (details.type !== 'GPU' || softwareRendering || gpuFallbackTriggered) {
+    return
+  }
+  gpuFallbackTriggered = true
+  try {
+    fs.mkdirSync(path.dirname(gpuMarker), { recursive: true })
+    fs.writeFileSync(gpuMarker, `gpu crashed: ${details.reason}\n`, 'utf8')
+  } catch (error) {
+    // 标记写不进去时仍然尝试重启一次
+    console.warn('[gpu] 写标记失败', error)
+  }
+  console.warn(`[gpu] GPU 进程异常退出（${details.reason}），重启并改用软件合成`)
+  app.relaunch({ args: [...process.argv.slice(1), '--disable-gpu'] })
+  app.quit()
+})
 
 /** 单条请求的兜底超时；Go 侧卡住时渲染层不能永久 pending */
 const REQUEST_TIMEOUT_MS = 10_000

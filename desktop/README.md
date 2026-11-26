@@ -256,8 +256,12 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
 8. **登录态绑定 ipc 进程**：会话文件按「PID + 进程启动时间」命名，TTL 12 小时并在每次成功请求后续期，
    进程退出会主动吊销；重启应用需要重新登录（v1 刻意不做「记住我」）。
 9. **`service.*` 只有 Linux 用户级 systemd 实现**：其它平台返回 `unavailable`，页面会照原样展示后端文案。
-10. **没有 `/dev/dri` 的环境自动走软件合成**（容器、部分虚拟机）：否则 Chromium 的 GPU 进程会反复崩溃，
-    最后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出，窗口根本出不来。正常桌面有 `/dev/dri`，不受影响。
+10. **GPU 崩溃自动退回软件合成**：没有 `/dev/dri`（容器、部分虚拟机）、上次 GPU 崩溃留下的标记、
+    显式 `--disable-gpu` 三种情况都直接走软件合成。有 GPU 但驱动/沙箱不让用时，Chromium 会对 GPU 进程
+    重试三次后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出；主进程收到第一次
+    `child-process-gone` 就写标记文件 `<userData>/gpu-software` 并带 `--disable-gpu` 重启一次，
+    标记写成功的话下次启动也会直接走软件合成，不会反复崩。想重新试硬件加速：
+    `CHAT_DEEPSEEK_GPU=on` 启动一次（会清掉标记），或删掉那个文件。
 11. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
     装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
     对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的
