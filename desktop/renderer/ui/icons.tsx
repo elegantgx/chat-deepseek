@@ -140,3 +140,42 @@ export function ChevronDownIcon(props: IconProps) {
     </IconBase>
   )
 }
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 5.5v13M5.5 12h13" />
+    </IconBase>
+  )
+}
+
+/** 重启：环形箭头，缺口在右上 */
+export function RefreshIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8" />
+      <path d="M20.4 4.6v5.2h-5.2" />
+    </IconBase>
+  )
+}
+
+/** 启停：电源符号，竖线 + 开口弧 */
+export function PowerIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 4.2v7.1" />
+      <path d="M7.7 6.8a7.4 7.4 0 1 0 8.6 0" />
+    </IconBase>
+  )
+}
+
+/** 下载 / 写入：向下箭头落在底座上，用于「立即备份」 */
+export function DownloadIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 4.4v10.4" />
+      <path d="M8 11.2l4 4 4-4" />
+      <path d="M5 19.6h14" />
+    </IconBase>
+  )
+}
