@@ -8,26 +8,25 @@ import type { HostErrorPayload, HostReply } from './ipc'
 // 主进程的 console 就是排障通道（stderr 转发、后端退出、冒烟标记都靠它）
 /* oxlint-disable no-console */
 
-// 窗口装饰是刻意取舍（2026-11，Electron 45 / Chromium 156），实机结论：
-// - 原生 Wayland 下装饰由 Chromium 自绘，是灰底方角，用户不认可；
-// - 退回 XWayland 后由 mutter 画 Adwaita 装饰（白底圆角、标题居中），无模糊感。
-// 所以 Linux Wayland 会话默认走 XWayland；代价是分数缩放（如 125%）下 XWayland 可能发糊，
-// 可用 CHAT_DEEPSEEK_OZONE=wayland 做对照。仅当用户显式设置该变量时才覆盖默认选择，
-// X11 会话不受影响（保持 Electron 自己的平台判断）。
-// 细节、诊断命令和 A/B 方法见 desktop/README.md「标题栏与 Wayland」。
-if (
-  process.platform === 'linux' &&
-  process.env.WAYLAND_DISPLAY &&
-  !process.env.CHAT_DEEPSEEK_OZONE
-) {
-  app.commandLine.appendSwitch('ozone-platform', 'x11')
-} else if (process.env.CHAT_DEEPSEEK_OZONE) {
-  app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
-}
+// Ozone 平台在 main.js 执行之前就选好了：appendSwitch 改不了浏览器进程，
+// 只会把 --ozone-platform 传给 GPU 等子进程，形成「浏览器 Wayland + GPU 走
+// X11/GLX」的混合配置。Mesa iris 在这条路径上会 SIGSEGV（GPU 进程 exit=11），
+// 所以这里不再强行切平台，跟随 Electron 自己的选择。
+// 确实需要 X11（例如要 mutter 画的标题栏）时，在命令行上传：
+//   electron --ozone-platform=x11 desktop/dist/main.js
+// 那时浏览器和 GPU 都是 X11，是否还崩需要在真机上重新验证。
 
 // 应用名决定 userData 目录（Linux ~/.config/chat-deepseek、macOS ~/Library/Application Support/chat-deepseek），
 // 桌面端的数据目录挂在它下面；不设的话会变成包名 chat-deepseek-desktop，路径既长又不像用户数据。
 app.setName('chat-deepseek')
+
+/** 排障用：CHAT_DEEPSEEK_DEBUG=1 时把窗口与进程事件打到 stderr，定位「没反应/自己退出」 */
+const debugLifecycle = process.env.CHAT_DEEPSEEK_DEBUG === '1'
+function trace(...args: unknown[]): void {
+  if (debugLifecycle) {
+    console.warn('[lifecycle]', ...args)
+  }
+}
 
 // 软件合成的三条触发路径：没有 /dev/dri（容器、部分虚拟机）、上次 GPU 崩溃留下的
 // 标记、显式 --disable-gpu。Chromium 的 GPU 进程崩到第三次会直接
@@ -47,6 +46,14 @@ if (forceGPU && !process.argv.includes('--disable-gpu')) {
 const noDri = process.platform === 'linux' && !fs.existsSync('/dev/dri')
 const softwareRendering =
   !forceGPU && (noDri || process.argv.includes('--disable-gpu') || fs.existsSync(gpuMarker))
+trace(
+  'gpu-policy',
+  `userData=${app.getPath('userData')}`,
+  `marker=${fs.existsSync(gpuMarker)}`,
+  `noDri=${noDri}`,
+  `argv=${process.argv.slice(1).join(' ')}`,
+  `software=${softwareRendering}`
+)
 if (softwareRendering) {
   console.warn('[gpu] 改用软件合成')
   // 只调 disableHardwareAcceleration() 不够：GPU 进程仍会起来并 SIGSEGV，
@@ -73,8 +80,11 @@ app.on('child-process-gone', (_event, details) => {
     // 标记写不进去时仍然尝试重启一次
     console.warn('[gpu] 写标记失败', error)
   }
-  console.warn(`[gpu] GPU 进程异常退出（${details.reason}），重启并改用软件合成`)
-  app.relaunch({ args: [...process.argv.slice(1), '--disable-gpu'] })
+  console.error(
+    `[gpu] GPU 进程异常退出（${details.reason}）。已记录，下次启动改用软件渲染；请重新打开应用`
+  )
+  // 不做 app.relaunch()：兜底子进程会和正在退出的父进程抢单实例锁，抢到后若窗口没显示，
+  // 就成了「活着但看不见」的进程，之后每次启动都被锁挡掉。让用户自己再启动一次更可控。
   app.quit()
 })
 
@@ -84,14 +94,6 @@ const REQUEST_TIMEOUT_MS = 10_000
 const isDev = !app.isPackaged
 /** 冒烟模式：窗口从不显示，只验证两条链路后自退 */
 const smoke = process.argv.includes('--smoke') || process.env.CHAT_DEEPSEEK_SMOKE === '1'
-/** 排障用：CHAT_DEEPSEEK_DEBUG=1 时把窗口与进程事件打到 stderr，定位「没反应/自己退出」 */
-const debugLifecycle = process.env.CHAT_DEEPSEEK_DEBUG === '1'
-function trace(...args: unknown[]): void {
-  if (debugLifecycle) {
-    console.warn('[lifecycle]', ...args)
-  }
-}
-
 /** 与原生主题保持一致的窗口底色，避免加载期白闪 */
 const DARK_BACKGROUND = '#1f1f1f'
 const LIGHT_BACKGROUND = '#ffffff'
@@ -434,8 +436,37 @@ function createWindow(): void {
       setTimeout(() => app.quit(), 800)
     })
   } else {
-    win.once('ready-to-show', () => {
+    // ready-to-show 和首帧绘制绑定：GPU 初始化失败时它永远不触发，
+    // 进程就会「活着但没有窗口」。渲染层加载完成后兜底等一下，仍没显示就强制 show。
+    let shown = false
+    let showFallback: NodeJS.Timeout | null = null
+    const showWindow = () => {
+      if (shown) {
+        return
+      }
+      shown = true
+      if (showFallback) {
+        clearTimeout(showFallback)
+        showFallback = null
+      }
       win.show()
+    }
+    win.once('ready-to-show', () => {
+      showWindow()
+    })
+    win.webContents.once('did-finish-load', () => {
+      showFallback = setTimeout(() => {
+        if (!win.isVisible()) {
+          console.warn('[window] ready-to-show 超时，强制显示窗口')
+          showWindow()
+        }
+      }, 2500)
+    })
+    win.once('closed', () => {
+      if (showFallback) {
+        clearTimeout(showFallback)
+        showFallback = null
+      }
     })
   }
   // 默认菜单被去掉后，开发时用 F12 打开 DevTools（生产不注册）
@@ -485,9 +516,11 @@ function bootstrap(): void {
 const gotLock = app.requestSingleInstanceLock()
 trace('single-instance-lock', gotLock)
 if (!gotLock) {
+  console.error(
+    "[main] 已有实例在运行，本次启动退出。若看不到窗口，先执行： pkill -f '[d]esktop/dist/main.js'"
+  )
   app.quit()
 } else {
-  app.on('second-instance', () => trace('second-instance'))
   app.on('before-quit', () => trace('before-quit'))
   app.on('will-quit', () => trace('will-quit'))
   app.on('quit', () => trace('quit'))
@@ -505,7 +538,10 @@ if (!gotLock) {
     if (win.isMinimized()) {
       win.restore()
     }
+    // show() 只能 map 窗口，不一定抢到焦点：Linux 上显式 moveTop + steal 才能把它带到前面
     win.show()
+    win.moveTop()
+    app.focus({ steal: true })
     win.focus()
   })
 

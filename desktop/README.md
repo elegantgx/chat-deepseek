@@ -172,63 +172,42 @@ window.host = {
 - 单实例：`requestSingleInstanceLock()` 失败直接退出；第二个实例只唤起已有窗口。
 - 退出时先给子进程 stdin EOF（协议里的正常关闭），再 `SIGTERM` 兜底。
 
-## 标题栏与 Wayland（Linux）
+## 标题栏与 Ozone 平台（Linux）
 
-**当前结论（已实机验证）：Linux Wayland 会话默认退回 XWayland，这是有意识的取舍。**
+**Ozone 平台在 `main.js` 执行之前就已经选好，`app.commandLine.appendSwitch('ozone-platform', …)` 改不了浏览器进程。**
+它只会把 `--ozone-platform` 塞进 GPU 等子进程，形成「浏览器 Wayland + GPU 走 X11/GLX」的混合配置；
+Mesa iris 在这条路径上会 SIGSEGV（`GPU process exited unexpectedly: exit_code=11`），
+而系统 Chrome 走纯 Wayland/EGL-GBM 就没问题。所以主进程**不再强行切平台**，跟随 Electron 自己的选择
+（Wayland 会话就是原生 Wayland，X11 会话就是 X11），GPU 与浏览器始终同一套平台。
 
-- 原生 Wayland：Chromium 自绘窗口装饰，是灰底方角；
-- XWayland：由 mutter 画服务器端 Adwaita 装饰（白底圆角、标题居中），且无模糊感——用户认可这一版。
+代价是 Wayland 会话里窗口装饰由 Chromium 自绘（灰底方角），不是 mutter 画的 Adwaita。
+这是有意的取舍：先保证 GPU 可用，装饰问题单独处理。
 
-`main.ts` 在 `app.whenReady()` 之前按会话选择平台，窗口 `title` 显式设为 `chat-deepseek`：
-
-```ts
-if (
-  process.platform === 'linux' &&
-  process.env.WAYLAND_DISPLAY &&
-  !process.env.CHAT_DEEPSEEK_OZONE
-) {
-  app.commandLine.appendSwitch('ozone-platform', 'x11')
-} else if (process.env.CHAT_DEEPSEEK_OZONE) {
-  app.commandLine.appendSwitch('ozone-platform', process.env.CHAT_DEEPSEEK_OZONE)
-}
-```
-
-- 未设置 `CHAT_DEEPSEEK_OZONE` 时：只有「Linux + 存在 `WAYLAND_DISPLAY`」才切 XWayland；
-  X11 会话和 Windows/macOS 仍交给 Electron 自己选平台。
-- 取舍的代价：XWayland 在分数缩放（125% / 150%）下可能发糊。XWayland 客户端通常按整倍渲染，
-  再由合成器整体缩放，应用侧改不了；接受统一装饰，就接受这个风险。在意清晰度就显式回原生 Wayland。
-
-### 覆盖与对照
-
-`CHAT_DEEPSEEK_OZONE` 一旦设置，就会被原样追加为 `--ozone-platform`，覆盖上面的默认选择：
+确实需要 X11（例如要 mutter 的服务器端装饰）时，**必须在真实命令行上传**，不能用 appendSwitch：
 
 ```sh
-# 强制原生 Wayland（回到灰底方角的自绘装饰，用于对照）
-CHAT_DEEPSEEK_OZONE=wayland ./node_modules/.bin/electron desktop/dist/main.js
-
-# 强制 XWayland
-CHAT_DEEPSEEK_OZONE=x11 ./node_modules/.bin/electron desktop/dist/main.js
+./node_modules/.bin/electron --ozone-platform=x11 desktop/dist/main.js
 ```
 
-不设置（或设为空字符串）就是上面的默认逻辑。值必须是 Electron/Chromium 认识的平台名，
-写错会让进程在启动阶段失败——这个变量只用于对照，不要配进产品启动脚本。另外 `wayland` 值只在
-Wayland 会话里可用，在纯 X11 会话里设它会因没有 Wayland compositor 而起不来。
-
-> 旧结论保留：`ozone-platform-hint` 在 Chromium 140（Electron 38）被删除，
-> `ELECTRON_OZONE_PLATFORM_HINT` 在 Electron 39 移除，`WaylandWindowDecorations` / `UseOzonePlatform`
-> 在 Electron 45 的二进制里查不到（见 electron/electron#48001）。所以这里用现存的 `--ozone-platform`，
-> 不再追加那两个 no-op switch。
+这样浏览器和 GPU 都是 X11。但 GPU 在 XWayland 上是否仍会崩，需要按下面的方法在真机复验；
+打包后的启动器同理，参数要写进 `.desktop` 的 `Exec=` 或启动脚本。
 
 ### 怎么确认跑在哪个后端
 
 ```sh
-# 打开 Chromium 日志，看 ozone / wayland / x11 相关行
+# Chromium 日志里的 ozone / wayland / x11 行
 ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1 | grep -iE 'ozone|wayland|x11'
+
+# 真有 X 窗口才说明浏览器是 X11（Wayland 窗口不会出现在这里）
+xwininfo -root -tree | grep -i chat-deepseek
 ```
 
-- **X11 会话**：本来就只有服务器端装饰，不会出现 CSD，老式标题栏不是 bug。
-- **Wayland 会话**：默认走 XWayland，标题栏归 mutter；`CHAT_DEEPSEEK_OZONE=wayland` 时归 Chromium 自绘。
-- 仍坚持原生标题栏：没有 `frame: false` / `titleBarStyle`，不自绘窗口外壳。
+- **X11 会话**：本来就只有服务器端装饰。
+- **Wayland 会话（默认）**：原生 Wayland，装饰由 Chromium 自绘。
+- 没有 `frame: false` / `titleBarStyle`，不自绘窗口外壳。
+
+> 旧结论已作废：`CHAT_DEEPSEEK_OZONE` 环境变量和「Wayland 默认退回 XWayland」的结论都基于
+> `appendSwitch` 测试，实测对浏览器无效（它只影响子进程）。
 
 ## 发版
 
@@ -262,7 +241,7 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
     `child-process-gone` 就写标记文件 `<userData>/gpu-software` 并带 `--disable-gpu` 重启一次，
     标记写成功的话下次启动也会直接走软件合成，不会反复崩。想重新试硬件加速：
     `CHAT_DEEPSEEK_GPU=on` 启动一次（会清掉标记），或删掉那个文件。
-11. **Wayland 标题栏只在这一台 Linux 桌面上验证**：Wayland 会话默认退回 XWayland、由 mutter 画 Adwaita
-    装饰，这是用户认可的版本，代价是分数缩放下可能发糊；`CHAT_DEEPSEEK_OZONE=wayland` 可回原生 Wayland
-    对照。其它 compositor 与 Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的
-    `chat-deepseek` 二进制跑通（无窗口、临时 userData、退出码 0）。
+11. **Wayland 窗口装饰**：默认走原生 Wayland，装饰由 Chromium 自绘（灰底方角）；要 mutter 的 Adwaita
+    装饰得在命令行带 `--ozone-platform=x11`，那条路径下 GPU 是否可用要真机复验。其它 compositor 与
+    Windows/macOS 未验证。`--smoke` 链路已在 Linux 上用真实的 `chat-deepseek` 二进制跑通（无窗口、
+    临时 userData、退出码 0）。
