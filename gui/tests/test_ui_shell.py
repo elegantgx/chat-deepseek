@@ -38,6 +38,7 @@ from cdgui.domain.state import (
     TaskKey,
 )
 from cdgui.domain.target import ConnectionKind, Endpoint, Target
+from cdgui.ui import main_window as main_window_module
 from cdgui.ui.main_window import MainWindow
 from cdgui.ui.primitives import Button
 from cdgui.ui.protocols import ControllerProtocol
@@ -301,15 +302,17 @@ class ShellTest(unittest.TestCase):
     def setUp(self) -> None:
         self._dark_hint = theme._dark_hint
         theme._dark_hint = False
+        self._original_dialogs = main_window_module.dialogs
         self.window: MainWindow | None = None
         self.controller: FakeController | None = None
 
     def tearDown(self) -> None:
         theme._dark_hint = self._dark_hint
         if self.window is not None:
-            self.window._load_dialogs = lambda: FakeDialogs(confirm=True)
+            main_window_module.dialogs = FakeDialogs(confirm=True)
             self.window.close()
             self.window.deleteLater()
+        main_window_module.dialogs = self._original_dialogs
         self.app.processEvents()
 
     def make_window(
@@ -454,7 +457,7 @@ class ShellTest(unittest.TestCase):
     def test_dialog_notice_uses_show_message(self) -> None:
         window, controller = self.make_window()
         dialogs = FakeDialogs()
-        window._load_dialogs = lambda: dialogs
+        main_window_module.dialogs = dialogs
         notice = Notice(
             "登录已失效",
             tone=NoticeTone.ERROR,
@@ -586,7 +589,7 @@ class ShellTest(unittest.TestCase):
     def test_close_calls_shutdown_without_service(self) -> None:
         window, controller = self.make_window()
         dialogs = FakeDialogs()
-        window._load_dialogs = lambda: dialogs
+        main_window_module.dialogs = dialogs
         window.close()
         self.settle()
 
@@ -607,7 +610,7 @@ class ShellTest(unittest.TestCase):
         )
         window, controller = self.make_window(state)
         dialogs = FakeDialogs(confirm=False)
-        window._load_dialogs = lambda: dialogs
+        main_window_module.dialogs = dialogs
         window.close()
         self.settle()
 

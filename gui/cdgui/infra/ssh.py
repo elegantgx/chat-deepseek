@@ -115,7 +115,7 @@ class SshSession:
         self.env = env
         self.connect_timeout = connect_timeout
         self.command_timeout = command_timeout
-        self.remote_user = ""
+        self.ssh_user = ""
         self._process: subprocess.Popen[str] | None = None
         self._stdout: queue.Queue[str | None] | None = None
         self._stderr_text = ""
@@ -231,7 +231,7 @@ class SshSession:
             detail = probe.stderr.strip()
             return detail or f"无法在 {self.host} 上启动 /bin/sh"
         who = self._exchange(("id", "-un"), ["id", "-un"], None, 5.0)
-        self.remote_user = who.stdout.strip() if who.ok else ""
+        self.ssh_user = who.stdout.strip() if who.ok else ""
         return ""
 
     def _exchange(

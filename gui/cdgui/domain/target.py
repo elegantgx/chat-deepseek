@@ -156,7 +156,7 @@ class Target:
         但 `rules.page_url` 只认远端 Public URL。"""
         cap = Capability(capability)
         if cap in (Capability.SAVE_BACKUP_AS, Capability.PICK_LOCAL_PATH):
-            return not self.remote
+            return self.connection is ConnectionKind.LOCAL
         return True
 
 

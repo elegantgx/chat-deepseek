@@ -10,12 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cli
-import ssh_session
 from cdgui.domain.target import ConnectionKind, Endpoint, Target
 from cdgui.infra import errors
-from cdgui.infra import serve as serve_module
-from cdgui.infra import ssh as ssh_module
 from cdgui.infra.gateway import CliGateway
 from cdgui.infra.transport import SshTransport
 
@@ -145,24 +141,6 @@ class GatewayOverSshTest(unittest.TestCase):
     def test_gateway_verify_handshakes(self) -> None:
         self.gateway.verify()
         self.assertTrue(self.transport.connected)
-
-
-class ShimIdentityTest(unittest.TestCase):
-    def test_ssh_session_shim_reexports_same_objects(self) -> None:
-        self.assertIs(ssh_session.SshSession, ssh_module.SshSession)
-        self.assertEqual(
-            ssh_session.TRANSPORT_EXIT, ssh_module.TRANSPORT_EXIT
-        )
-        self.assertEqual(
-            ssh_session.SERVE_PID_PREFIX, ssh_module.SERVE_PID_PREFIX
-        )
-        self.assertIs(ssh_session.remote_binary, ssh_module.remote_binary)
-        self.assertIs(ssh_session.serve_command, ssh_module.serve_command)
-        self.assertIs(ssh_session.ssh_command, ssh_module.ssh_command)
-
-    def test_cli_shim_reexports_same_objects(self) -> None:
-        self.assertIs(cli.ServerProcess, serve_module.ServerProcess)
-        self.assertIs(cli.CommandResult, ssh_module.CommandResult)
 
 
 if __name__ == "__main__":

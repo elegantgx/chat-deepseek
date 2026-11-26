@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from ..domain import rules
 from ..domain.rules import ActionId
 from ..domain.state import AppState, Notice, NoticeTone, PageId
-from . import palette, tokens
+from . import dialogs, palette, tokens
 from .login_sheet import LoginSheet
 from .pages import (
     AccountsPage,
@@ -351,7 +351,6 @@ class MainWindow(QMainWindow):
 
     def _present_notice(self, notice: Notice) -> None:
         if notice.dialog:
-            dialogs = self._load_dialogs()
             dialogs.show_message(
                 self,
                 notice.title or "提示",
@@ -364,14 +363,6 @@ class MainWindow(QMainWindow):
             error=notice.tone is NoticeTone.ERROR,
         )
 
-    def _load_dialogs(self):
-        """C5d 的 ``cdgui.ui.dialogs`` 尚未落地时回退到旧 dialogs。"""
-        try:
-            from . import dialogs as ui_dialogs
-        except ImportError:
-            import dialogs as ui_dialogs
-        return ui_dialogs
-
     # -- 关闭 --------------------------------------------------------------
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt 命名
@@ -381,7 +372,6 @@ class MainWindow(QMainWindow):
         if not self._closing:
             state = self.controller.state
             if rules.is_running(state):
-                dialogs = self._load_dialogs()
                 confirmed = dialogs.ask_confirm(
                     self,
                     CLOSE_CONFIRM_TITLE,

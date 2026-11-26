@@ -195,7 +195,7 @@ class SshTransport:
 
     @property
     def remote_user(self) -> str:
-        return self._session.remote_user
+        return self._session.ssh_user
 
     @property
     def connected(self) -> bool:

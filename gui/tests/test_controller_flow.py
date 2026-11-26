@@ -579,7 +579,7 @@ class EnsureLoginTest(ControllerTestCase):
         self.assertEqual(prompt.username, "old")
         self.assertEqual(called, [])
 
-    def test_pending_action_runs_after_login_lists(self) -> None:
+    def test_queued_login_action_runs_after_lists(self) -> None:
         transport = FakeTransport(self.target)
         self.script_login(transport)
         transport.script(("backup",), ok(("backup",), "备份已写入 /data/backups/x.zip\n"))
@@ -1559,7 +1559,7 @@ class MiscTest(ControllerTestCase):
         controller = self.make_controller(transport=transport, target=target)
 
         self.assertEqual(controller.service_user, "")
-        transport.session.remote_user = "nasuser"
+        transport.session.ssh_user = "nasuser"
         self.assertEqual(controller.service_user, "nasuser")
 
     def test_apply_target_remote_writes_ssh_config(self) -> None:

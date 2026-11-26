@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cli
+from cdgui.infra import serve as cli
 
 
 @unittest.skipUnless(os.name == "posix", "需要 /bin/sh")

@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import ssh_session
+from cdgui.infra import ssh as ssh_session
 
 FAKE_SSH = """#!/bin/sh
 # 忽略 ssh 选项和主机名；最后一个是远端命令，和真实 ssh 一样交给登录 shell。
