@@ -71,14 +71,16 @@ class ServicePage(Page):
         self.placeholder.deleteLater()
 
     def _add_body(self, widget: QWidget, stretch: int = 0) -> None:
-        """插到 base 末尾的弹簧之前，保证内容顶对齐。"""
-        self.body.insertWidget(self.body.count() - 1, widget, stretch)
+        """按装配顺序 append；内容顶对齐靠 ``_build`` 结尾的一个 stretch。"""
+        self.body.addWidget(widget, stretch)
 
     def _build(self) -> None:
         self._build_status_card()
         self._build_banner()
         self._build_detail_card()
         self._build_log_card()
+        # 服务页内容顶对齐：只留一个末尾弹簧，不参与页面级高度分配。
+        self.body.addStretch(1)
 
     def _build_status_card(self) -> None:
         self.status_card = primitives.Surface(kind="card", parent=self.widget)
@@ -242,7 +244,7 @@ class ServicePage(Page):
             host=state.target.host if state.target.remote else "",
             installed=host.service.installed,
             enabled=host.service.enabled,
-            active=host.service.active,
+            active=rules.service_active(host),
         )
         value = sheet.exec_modal()
         if not isinstance(value, dict):

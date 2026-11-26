@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -737,6 +737,50 @@ class AccountsPageTest(unittest.TestCase):
         self.assertIs(page._rows[0], rows[0])
         self.assertIs(page._rows[1], rows[1])
         self.assertTrue(page._rows[1].is_selected())
+
+    # -- 几何（1000×760 固定窗口） ----------------------------------------
+
+    def test_layout_list_fills_height_and_footer_sits_on_bottom(self) -> None:
+        """列表吃掉剩余高度、5 行完整可见，动作条贴着页面底边。"""
+        target = local_target()
+        people = tuple(user(f"member{index}") for index in range(5))
+        page, _ = self.build_page(
+            state_for(
+                target, host_for(target), who=identity(), users=people
+            ),
+            size=(1000, 760),
+        )
+        page_widget = page.widget
+
+        self.assertGreaterEqual(page.scroll.viewport().height(), 360)
+        self.assertEqual(page.actions.height(), 52)
+        last_row = page._rows[-1]
+        row_bottom = (
+            last_row.mapTo(page.scroll.viewport(), QPoint(0, 0)).y()
+            + last_row.height()
+        )
+        self.assertLessEqual(row_bottom, page.scroll.viewport().height())
+
+        footer_bottom = (
+            page.actions.mapTo(page_widget, QPoint(0, 0)).y()
+            + page.actions.height()
+        )
+        self.assertLessEqual(
+            abs(page_widget.height() - footer_bottom),
+            8,
+            f"底栏底边 {footer_bottom} 应贴近页面高度 {page_widget.height()}",
+        )
+
+    def test_layout_empty_state_fills_whole_list_area(self) -> None:
+        target = local_target()
+        page, _ = self.build_page(
+            state_for(target, host_for(target), who=identity(), users=()),
+            size=(1000, 760),
+        )
+
+        self.assertEqual(page._empty_mode, "empty")
+        self.assertEqual(page.empty.height(), page.list_area.height())
+        self.assertGreaterEqual(page.empty.height(), 360)
 
 
 if __name__ == "__main__":

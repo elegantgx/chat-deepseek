@@ -128,6 +128,15 @@ def _systemd_active(host: HostConfig | None) -> bool:
     return bool(host is not None and host.service.installed and host.service.active)
 
 
+def service_active(host: HostConfig | None) -> bool:
+    """systemd 服务是否在运行。
+
+    服务页只把这个事实交给安装表单（决定“更新后重启”文案），不在页面里
+    直接读 ``host.service.active``；状态判定仍以这里为准。
+    """
+    return bool(host is not None and host.service.active)
+
+
 def is_running(state: AppState) -> bool:
     """前台会话或已运行的 systemd 服务都算运行中。"""
     return state.foreground is not None or _systemd_active(host_config(state))

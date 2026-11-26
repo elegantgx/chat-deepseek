@@ -13,6 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -216,10 +217,11 @@ def make_page(
     service_user: str = "gx",
     show: bool = True,
     auto_open: bool = False,
+    size: tuple[int, int] = (900, 700),
 ) -> tuple[ServicePage, FakeController]:
     controller = FakeController(state, service_user=service_user)
     page = ServicePage(controller)
-    page.widget.resize(900, 700)
+    page.widget.resize(*size)
     if show:
         page.widget.show()
     page.auto_open.setChecked(auto_open)
@@ -623,6 +625,25 @@ class ServicePageTest(unittest.TestCase):
         rerender(page, controller, running)
         page.primary_button.click()
         self.assertEqual(controller.names(), ["start_service", "stop_service"])
+
+    # -- 几何（1000×760 固定窗口） ----------------------------------------
+
+    def test_layout_content_stays_top_aligned(self) -> None:
+        """服务页正文顶对齐：末尾只有一个自己的弹簧，不被拉散。"""
+        target = local_target()
+        host = host_for(target, installed=True, active=True, enabled=True)
+        page, _ = self.build_page(
+            state_for(target, host, fg=foreground(target)), size=(1000, 760)
+        )
+
+        self.assertIsNotNone(page.body.itemAt(page.body.count() - 1).spacerItem())
+        heading_bottom = (
+            page.heading.mapTo(page.widget, QPoint(0, 0)).y()
+            + page.heading.height()
+        )
+        status_top = page.status_card.mapTo(page.widget, QPoint(0, 0)).y()
+        self.assertGreaterEqual(status_top, heading_bottom)
+        self.assertLess(status_top - heading_bottom, 40)
 
 
 if __name__ == "__main__":

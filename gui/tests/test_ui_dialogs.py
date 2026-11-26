@@ -10,7 +10,6 @@ import os
 import subprocess
 import sys
 import unittest
-from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -23,10 +22,8 @@ from PySide6.QtGui import QFontDatabase, QGuiApplication
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog, QWidget
 
-import parsing
 import theme
 from cdgui.ui import dialogs
-from cdgui.ui.dialogs import backup_records as backup_module
 from cdgui.ui.dialogs import confirm as confirm_module
 from cdgui.ui.dialogs import message as message_module
 from cdgui.ui.dialogs.base import FormDialog, SheetDialog
@@ -460,80 +457,6 @@ class UiDialogsTest(unittest.TestCase):
         QTest.qWait(120)
         self.assertEqual(dialog.linger_row.button.text(), "复制")
 
-    # -- BackupRecordsDialog ----------------------------------------------
-
-    def _backups(self) -> list[parsing.Backup]:
-        return [
-            parsing.Backup(
-                "backup-1.zip", "1.2 MB", datetime(2026, 11, 26, 10, 0, 0)
-            ),
-            parsing.Backup(
-                "backup-2.zip", "2.4 MB", datetime(2026, 11, 26, 11, 30, 0)
-            ),
-        ]
-
-    def test_backup_records_empty_state(self) -> None:
-        dialog = self._track(
-            dialogs.BackupRecordsDialog(None, "/srv/data/backups", [])
-        )
-        self.assertEqual(dialog.windowTitle(), "备份记录")
-        self.assertEqual(dialog.description_label.text(), "备份地址：/srv/data/backups")
-        self.assertIsNotNone(dialog.empty_label)
-        self.assertEqual(dialog.empty_label.text(), "还没有备份")
-        self.assertEqual(dialog.rows, [])
-        self.assertFalse(dialog.restore_button.isEnabled())
-        self.assertEqual(dialog.restore_button.kind, "danger")
-        self.assertEqual(dialog.warning_label.text(), backup_module.RESTORE_WARNING)
-        self.assertIn(
-            "恢复会覆盖 chat.db、config.json、master.key 和 files/，请先停止服务。",
-            dialog.warning_label.text(),
-        )
-        dialog.reject()
-        self.assertIsNone(dialog.value)
-
-    def test_backup_records_selection_returns_name(self) -> None:
-        dialog = self._track(
-            dialogs.BackupRecordsDialog(
-                None, "/srv/data/backups", self._backups()
-            )
-        )
-        self.assertEqual(len(dialog.rows), 2)
-        first = dialog.rows[0]
-        self.assertEqual(first.title.text(), "2026-11-26 10:00:00")
-        self.assertEqual(first.subtitle.text(), "backup-1.zip")
-        self.assertEqual(first.trailing.text(), "1.2 MB")
-        self.assertFalse(first.is_selected())
-        self.assertFalse(dialog.restore_button.isEnabled())
-        self.assertIs(dialog._initial_focus, first)
-
-        first.clicked.emit()
-        self.assertEqual(dialog.selected, "backup-1.zip")
-        self.assertTrue(first.is_selected())
-        self.assertFalse(dialog.rows[1].is_selected())
-        self.assertTrue(dialog.restore_button.isEnabled())
-
-        dialog.rows[1].clicked.emit()
-        self.assertEqual(dialog.selected, "backup-2.zip")
-        self.assertFalse(first.is_selected())
-        self.assertTrue(dialog.rows[1].is_selected())
-
-        dialog._ok()
-        self.assertEqual(dialog.value, "backup-2.zip")
-
-    def test_backup_records_keyboard_space_selects(self) -> None:
-        dialog = self._track(
-            dialogs.BackupRecordsDialog(
-                None, "/srv/data/backups", self._backups()
-            )
-        )
-        first = dialog.rows[0]
-        QTest.keyClick(first, Qt.Key.Key_Space)
-        self.assertEqual(dialog.selected, "backup-1.zip")
-        self.assertTrue(dialog.restore_button.isEnabled())
-        QTest.keyClick(first, Qt.Key.Key_Space)
-        self.assertIsNone(dialog.selected)
-        self.assertFalse(dialog.restore_button.isEnabled())
-
     # -- 包导出 ------------------------------------------------------------
 
     def test_dialog_package_exports_page_facing_names(self) -> None:
@@ -544,7 +467,6 @@ class UiDialogsTest(unittest.TestCase):
             "PasswordForm",
             "GroupForm",
             "ServiceInstallSheet",
-            "BackupRecordsDialog",
         ):
             self.assertTrue(hasattr(dialogs, name), name)
             self.assertIn(name, dialogs.__all__)

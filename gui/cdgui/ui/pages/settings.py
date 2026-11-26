@@ -135,7 +135,8 @@ class SettingsPage(Page):
         self.content_layout.addStretch(1)
 
         self.scroll.setWidget(self.content)
-        self.body.addWidget(self.scroll)
+        # 滚动区吃掉整个内容区，卡片按自然高度堆叠，登录/关于卡滚得到。
+        self.body.addWidget(self.scroll, 1)
 
     # -- 连接卡 ------------------------------------------------------------
 

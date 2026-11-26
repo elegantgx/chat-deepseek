@@ -15,6 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -480,6 +481,77 @@ class BackupsPageTest(unittest.TestCase):
         self.assertIn("ssh timeout", page.info_error_label.text())
         self.assertIn("状态读取失败", page.info_error_label.text())
         self.assertIn("重试", page.info_error_label.text())
+
+    # -- 几何（1000×760 固定窗口） ----------------------------------------
+
+    def _window_page(
+        self, state: AppState
+    ) -> tuple[BackupsPage, FakeController]:
+        page, controller = self._page(state)
+        page.widget.setParent(None)
+        page.widget.resize(1000, 760)
+        page.widget.show()
+        self.addCleanup(page.widget.deleteLater)
+        return page, controller
+
+    def test_layout_header_two_rows_list_fills_and_banner_touches_list(self) -> None:
+        """页头两行、前置条件紧接页头、列表吃满剩余高度、底栏贴底。"""
+        state = self._running_state()
+        page, _controller = self._window_page(state)
+        self._render(page, state)
+        self.app.processEvents()
+
+        # 第一行是标题 + 三个动作，第二行是整行备份地址。
+        self.assertEqual(page.heading.text(), "备份")
+        for button in (
+            page.refresh_button,
+            page.backup_as_button,
+            page.backup_now_button,
+        ):
+            self.assertIs(button.parent(), page.heading)
+        heading_bottom = (
+            page.heading.mapTo(page.widget, QPoint(0, 0)).y()
+            + page.heading.height()
+        )
+        address_top = page.address_row.mapTo(page.widget, QPoint(0, 0)).y()
+        self.assertGreater(address_top, heading_bottom)
+        self.assertGreaterEqual(page.address_row.width(), page.widget.width() - 120)
+
+        # 列表视口够高，行从顶部开始，前置条件与列表之间没有固定大空白。
+        self.assertGreaterEqual(page.list_scroll.viewport().height(), 300)
+        banner_bottom = (
+            page.precondition.mapTo(page.widget, QPoint(0, 0)).y()
+            + page.precondition.height()
+        )
+        list_top = page.list_scroll.mapTo(page.widget, QPoint(0, 0)).y()
+        self.assertFalse(page.precondition.isHidden())
+        self.assertLess(list_top - banner_bottom, 40)
+        first_row_top = page.rows[0].mapTo(
+            page.list_scroll.viewport(), QPoint(0, 0)
+        ).y()
+        self.assertLessEqual(first_row_top, 8)
+
+        # 恢复条贴着页面底边。
+        footer = page.content.layout().itemAt(
+            page.content.layout().count() - 1
+        ).widget()
+        footer_bottom = (
+            footer.mapTo(page.widget, QPoint(0, 0)).y() + footer.height()
+        )
+        self.assertLessEqual(abs(page.widget.height() - footer_bottom), 8)
+
+    def test_layout_empty_state_fills_list_viewport(self) -> None:
+        state = make_state(
+            identity_value=identity(), backups=(), selected_backup=None
+        )
+        page, _controller = self._window_page(state)
+        self._render(page, state)
+        self.app.processEvents()
+
+        self.assertFalse(page.empty_widget.isHidden())
+        self.assertEqual(
+            page.empty_widget.height(), page.list_scroll.viewport().height()
+        )
 
 
 if __name__ == "__main__":

@@ -128,6 +128,13 @@ class AccountsPage(Page):
             description="账户列表、组标签与权限操作。",
         )
         self._remove_placeholder()
+        # 底栏要贴着页面底边（状态栏正上方），所以底部只留一个最小间距。
+        self.body.setContentsMargins(
+            tokens.space(24),
+            tokens.space(20),
+            tokens.space(24),
+            tokens.space(8),
+        )
         self._users_snapshot: tuple[parsing.User, ...] | None = None
         self._rows: list[UserRow] = []
         self._empty_mode = ""
@@ -147,7 +154,8 @@ class AccountsPage(Page):
         self.placeholder.deleteLater()
 
     def _add_body(self, widget: QWidget, stretch: int = 0) -> None:
-        self.body.insertWidget(self.body.count() - 1, widget, stretch)
+        """页面自己排 body：列表拿 stretch=1，底栏最后 append 贴底。"""
+        self.body.addWidget(widget, stretch)
 
     def _build(self) -> None:
         self._build_header()

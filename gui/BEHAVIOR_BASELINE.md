@@ -1,6 +1,7 @@
 # GUI 行为基线（重构验收用）
 
 > 基线：`feature/dev` @ `07a50ce`，`gui/tests` 117 个用例通过。
+> 重构后：`refactor/gui-core` @ `ca1539e`，`gui/tests` 627 个用例通过（2026-11-26）。
 > 用途：大重构的验收清单。重构后逐条对照，**文案与副作用顺序都算契约**；允许改的只有 §8 明确列出的 12 处不一致。
 > 完整逐行清点依据：`app.py`、`dialogs.py`、`parsing.py`、`ssh_session.py`、`cli.py`、`service_plan.py`。
 

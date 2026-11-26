@@ -14,6 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QApplication, QScrollArea, QWidget
 
 import gui_config
@@ -466,6 +467,32 @@ class SettingsPageTest(unittest.TestCase):
         self.assertEqual(page.version_label.text(), "0.1.4 · linux/amd64")
         page.help_button.click()
         self.assertEqual(controller.names(), ["show_help"])
+
+    # -- 几何（1000×760 固定窗口） ----------------------------------------
+
+    def test_layout_scroll_area_fills_page_and_cards_are_reachable(self) -> None:
+        state = make_state(identity_value=identity())
+        page, _controller = self._page(state)
+        page.widget.setParent(None)
+        page.widget.resize(1000, 760)
+        page.widget.show()
+        self.addCleanup(page.widget.deleteLater)
+        self._render(page, state)
+        self.app.processEvents()
+
+        self.assertGreaterEqual(page.scroll.viewport().height(), 500)
+        # 卡片在滚动内容里自然堆叠，登录卡与关于卡都能滚到。
+        self.assertGreater(page.scroll.verticalScrollBar().maximum(), 0)
+        self.assertIs(page.login_card.parent(), page.content)
+        self.assertIs(page.about_card.parent(), page.content)
+        for card in (page.login_card, page.about_card):
+            page.scroll.ensureWidgetVisible(card)
+            self.app.processEvents()
+            top = card.mapTo(page.scroll.viewport(), QPoint(0, 0)).y()
+            self.assertGreaterEqual(top, 0)
+            self.assertLessEqual(
+                top + card.height(), page.scroll.viewport().height()
+            )
 
 
 if __name__ == "__main__":

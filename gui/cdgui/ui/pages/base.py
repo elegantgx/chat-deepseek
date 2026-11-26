@@ -24,7 +24,13 @@ __all__ = ["Page", "PageId"]
 
 
 class Page:
-    """一个页面 = 标题 + 占位说明 + widget；子类按需覆盖 render/can_leave。"""
+    """一个页面 = 标题 + 占位说明 + widget；子类按需覆盖 render/can_leave。
+
+    基类不往 ``self.body`` 末尾加弹簧：页面自己决定哪一块吃掉剩余高度
+    （列表 ``stretch=1``、设置页滚动区 ``stretch=1``、服务页自己收尾一个
+    stretch 保持顶对齐）。``QStackedWidget`` 里所有页面都拿到同样的高度，
+    基类的弹簧会和页面的弹簧平分剩余空间。
+    """
 
     def __init__(
         self,
@@ -55,7 +61,6 @@ class Page:
         self.placeholder.setProperty("tone", "muted")
         self.placeholder.setWordWrap(True)
         self.body.addWidget(self.placeholder)
-        self.body.addStretch(1)
 
     def render(self, ui: "UiState", state: "AppState | None") -> None:
         """真实内容由 C5c/C5d 填充；骨架不写任何控件。"""

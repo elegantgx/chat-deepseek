@@ -105,6 +105,13 @@ class BackupsPage(Page):
                 widget.deleteLater()
         self.body.addWidget(self.heading)
         self.body.setSpacing(tokens.space(12))
+        # 底栏贴底：底部只留一个最小间距。
+        self.body.setContentsMargins(
+            tokens.space(24),
+            tokens.space(20),
+            tokens.space(24),
+            tokens.space(8),
+        )
 
     def _build(self) -> None:
         self.lock_view = self._build_lock_view()
@@ -157,9 +164,25 @@ class BackupsPage(Page):
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(tokens.space(12))
 
-        action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 0)
-        action_row.setSpacing(tokens.space(8))
+        # 页头第一行：标题 + 三个动作挂在 base 的 SectionHeading 上。
+        self.refresh_button = primitives.Button(
+            "刷新", kind="secondary", size="lg", parent=content
+        )
+        self.refresh_button.setAccessibleName("刷新备份列表")
+        self.refresh_button.clicked.connect(self.controller.refresh_backups)
+        self.backup_as_button = primitives.Button(
+            "备份到…", kind="secondary", size="lg", parent=content
+        )
+        self.backup_as_button.clicked.connect(self._choose_backup_path)
+        self.backup_now_button = primitives.Button(
+            "立即备份", kind="primary", size="lg", parent=content
+        )
+        self.backup_now_button.clicked.connect(self.controller.backup_now)
+        self.heading.add(self.refresh_button)
+        self.heading.add(self.backup_as_button)
+        self.heading.add(self.backup_now_button)
+
+        # 页头第二行：备份地址整行（标签 + 只读字段 + 复制），不再和按钮挤。
         self.address_row = CopyRow(
             "备份地址",
             "",
@@ -169,31 +192,7 @@ class BackupsPage(Page):
         self.address_row.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
-        action_row.addWidget(self.address_row, 1)
-
-        self.refresh_button = primitives.Button(
-            "刷新", kind="secondary", size="lg", parent=content
-        )
-        self.refresh_button.setAccessibleName("刷新备份列表")
-        self.refresh_button.clicked.connect(self.controller.refresh_backups)
-        action_row.addWidget(self.refresh_button, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        self.backup_as_button = primitives.Button(
-            "备份到…", kind="secondary", size="lg", parent=content
-        )
-        self.backup_as_button.clicked.connect(self._choose_backup_path)
-        action_row.addWidget(
-            self.backup_as_button, 0, Qt.AlignmentFlag.AlignVCenter
-        )
-
-        self.backup_now_button = primitives.Button(
-            "立即备份", kind="primary", size="lg", parent=content
-        )
-        self.backup_now_button.clicked.connect(self.controller.backup_now)
-        action_row.addWidget(
-            self.backup_now_button, 0, Qt.AlignmentFlag.AlignVCenter
-        )
-        column.addLayout(action_row)
+        column.addWidget(self.address_row)
 
         self.recent_label = QLabel("", content)
         self.recent_label.setObjectName("cdguiBackupsRecent")
@@ -202,6 +201,7 @@ class BackupsPage(Page):
         self.recent_label.setWordWrap(True)
         column.addWidget(self.recent_label)
 
+        # 前置条件条紧接页头，然后才是列表；页面里不再有固定大空白。
         self.precondition = self._build_precondition(content)
         column.addWidget(self.precondition)
 
@@ -292,6 +292,7 @@ class BackupsPage(Page):
         empty_layout.addWidget(self.empty_hint)
         empty_layout.addStretch(1)
         list_layout.addWidget(self.empty_widget, 1)
+        self._list_layout = list_layout
 
         self.list_scroll.setWidget(host)
         self._restore_timer = QTimer(self.list_scroll)
@@ -445,7 +446,20 @@ class BackupsPage(Page):
         for archive in state.backups:
             self.rows.append(self._make_row(archive))
         self.empty_widget.setVisible(not state.backups)
+        self._sync_tail_stretch(bool(state.backups))
         self._restore_timer.start(0)
+
+    def _sync_tail_stretch(self, has_rows: bool) -> None:
+        """记录列表末尾补一个弹簧让行从顶部排；空态块则自己占满视口。"""
+        count = self._list_layout.count()
+        has_spacer = (
+            count > 0
+            and self._list_layout.itemAt(count - 1).spacerItem() is not None
+        )
+        if has_rows and not has_spacer:
+            self._list_layout.addStretch(1)
+        elif not has_rows and has_spacer:
+            self._list_layout.takeAt(count - 1)
 
     def _make_row(self, archive) -> primitives.ListRow:
         size = QLabel(archive.size, self.list_scroll)

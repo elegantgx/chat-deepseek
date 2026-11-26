@@ -122,6 +122,10 @@ def run_popen(
     （必要时 kill），返回退出码 1 和固定说明，调用方据此归类 TIMEOUT/CANCELLED。
     """
     args = tuple(argv[1:])
+    # 预取消不应再启动子进程：否则像 `exit 0` 这样的命令可能先结束，
+    # 轮询来不及看到取消标志，调用方会拿到成功的假象。
+    if cancel is not None and cancel.cancelled:
+        return CommandResult(args, 1, "", CANCELLED_STDERR)
     try:
         process, stdout_file, stderr_file, stdin_file = _spawn(argv, stdin)
     except FileNotFoundError as exc:
