@@ -1,22 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { PageBody, PageHead } from '../../app'
-import type { AccountGroup, AccountRow, AuthState } from '../../app/ipc-types'
+import { PageBody, PageHead, normalizeHostError, useHost, useRequest } from '../../app'
+import type { HostError } from '../../app'
+import type { AccountGroup, AccountList, AccountRow, AuthState } from '../../app/ipc-types'
 import {
+  AlertTriangleIcon,
   Badge,
   Button,
   Card,
   CardFooter,
+  EmptyState,
   Field,
   PlusIcon,
   Table,
   TextButton,
   Toast,
 } from '../../ui'
-import type { TableColumn } from '../../ui'
+import type { TableColumn, ToastTone } from '../../ui'
 import { AddAccountDialog, ChangePasswordDialog, DeleteAccountDialog } from './AccountDialogs'
 import type { AddAccountValues } from './AccountDialogs'
-import { FIXTURE_ACCOUNTS, FIXTURE_AUTH } from './fixtures'
 import styles from './page.module.css'
 
 type DialogState =
@@ -25,46 +27,34 @@ type DialogState =
   | { kind: 'delete'; accountId: string }
 
 interface ToastMessage {
-  tone: 'success' | 'error'
+  tone: ToastTone
   text: string
 }
 
+type AccountAction = 'add' | 'password' | 'delete'
+
 const GROUP_RANK: Record<AccountGroup, number> = { User: 0, Admin: 1, Owner: 2 }
 
-/** 样本操作的模拟延迟；真后端里由 ipc 往返决定 */
-const OPERATION_DELAY = 420
-
-function delay(): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, OPERATION_DELAY)
-  })
-}
-
-/**
- * hash 既是路由也是截图开关：
- * `#accounts-login` 初始未登录，`#accounts-add` 初始打开添加对话框，`#accounts-dark` 只切主题。
- */
-function readHashMode(): { login: boolean; add: boolean } {
-  const raw = window.location.hash.replace(/^#\/?/, '')
-  const parts = raw.split('-')
-  return { login: parts.includes('login'), add: parts.includes('add') }
+/** 操作者权限按最高组算，与后端 highestRank 一致 */
+function highestRank(groups: readonly AccountGroup[] | undefined): number {
+  let rank = GROUP_RANK.User
+  for (const group of groups ?? []) {
+    if (GROUP_RANK[group] > rank) {
+      rank = GROUP_RANK[group]
+    }
+  }
+  return rank
 }
 
 function roleLabel(groups: readonly AccountGroup[] | undefined): string {
-  let highest: AccountGroup = 'User'
-  for (const group of groups ?? []) {
-    if (GROUP_RANK[group] > GROUP_RANK[highest]) {
-      highest = group
-    }
+  const rank = highestRank(groups)
+  if (rank >= GROUP_RANK.Owner) {
+    return '所有者'
   }
-  switch (highest) {
-    case 'Owner':
-      return '所有者'
-    case 'Admin':
-      return '管理员'
-    default:
-      return '成员'
+  if (rank >= GROUP_RANK.Admin) {
+    return '管理员'
   }
+  return '成员'
 }
 
 /** 头像块用用户名前两位，和效果图的 GX / CH / LI 一致 */
@@ -112,6 +102,67 @@ const COLUMNS: ReadonlyArray<TableColumn<AccountRow>> = [
     render: (row) => <span className={styles.createdAt}>{formatDateTime(row.createdAt)}</span>,
   },
 ]
+
+/** 写操作失败文案按 code 分支；message 只用于诊断，不能拿来驱动提示 */
+function failureText(action: AccountAction, error: HostError): string {
+  switch (error.code) {
+    case 'unauthenticated':
+      return '登录已过期，请重新登录'
+    case 'bad_request':
+      return error.message
+    case 'not_found':
+      return '账户不存在'
+    case 'conflict':
+      return action === 'add' ? '用户名已存在' : error.message
+    case 'permission_denied':
+      // 同码有「只有 Owner 可以操作 X」「不能删除自己」「不能删除最后一名活动 Owner」
+      // 等多种原因，直接展示后端 message，避免固定文案误报
+      return error.message
+    default:
+      return error.message
+  }
+}
+
+function failureToast(action: AccountAction, error: HostError): string {
+  return `${error.code}: ${failureText(action, error)}`
+}
+
+interface ReadErrorCardProps {
+  title: string
+  error: HostError
+  busy: boolean
+  onRetry: () => void
+}
+
+/** 读失败不落成空表：明确说明失败原因，并给一次重试 */
+function ReadErrorCard({ title, error, busy, onRetry }: ReadErrorCardProps) {
+  return (
+    <Card grow>
+      <div className={styles.stateArea}>
+        <EmptyState
+          title={title}
+          description={`${error.code}: ${error.message}`}
+          icon={<AlertTriangleIcon />}
+          action={
+            <Button tone="secondary" disabled={busy} onClick={onRetry}>
+              重试
+            </Button>
+          }
+        />
+      </div>
+    </Card>
+  )
+}
+
+function LoadingCard({ title, description }: { title: string; description?: string }) {
+  return (
+    <Card grow>
+      <div className={styles.stateArea}>
+        <EmptyState title={title} description={description} />
+      </div>
+    </Card>
+  )
+}
 
 interface LoginCardProps {
   busy: boolean
@@ -186,29 +237,46 @@ function LoginCard({ busy, onLogin }: LoginCardProps) {
   )
 }
 
-export function AccountsPage() {
-  const [initialMode] = useState(readHashMode)
-  const [auth, setAuth] = useState<AuthState>(() =>
-    initialMode.login ? { authenticated: false } : FIXTURE_AUTH
-  )
-  const [accounts, setAccounts] = useState<AccountRow[]>(() => [...FIXTURE_ACCOUNTS.accounts])
-  const [dialog, setDialog] = useState<DialogState | null>(() =>
-    initialMode.login || !initialMode.add ? null : { kind: 'add' }
-  )
+interface AccountsPanelProps {
+  auth: AuthState
+  sessionBusy: boolean
+  onLogout: () => void
+  onSessionLost: () => void
+  showToast: (tone: ToastTone, text: string) => void
+}
+
+/**
+ * 已登录后的账户列表。只在 `auth.whoami` 为 true 时挂载，
+ * 退出登录时随登录卡切换一起卸载，列表数据自然清空。
+ */
+function AccountsPanel({
+  auth,
+  sessionBusy,
+  onLogout,
+  onSessionLost,
+  showToast,
+}: AccountsPanelProps) {
+  const host = useHost()
+  const list = useRequest<AccountList>('account.list')
+  const [dialog, setDialog] = useState<DialogState | null>(null)
   const [busy, setBusy] = useState(false)
-  const [toast, setToast] = useState<ToastMessage | null>(null)
   // 用 ref 卡住重复提交：双击时 state 还没刷新，光看 busy 不够
   const busyRef = useRef(false)
 
+  const accounts = list.data?.accounts ?? []
+  const frozen = busy || sessionBusy
+  const operatorRank = highestRank(auth.groups)
+  const canAssignAdmin = operatorRank >= GROUP_RANK.Owner
+  // 与后端 canOperate 一致：Owner 可以操作任何人，其他角色只能操作权限严格更低的账户
+  const canOperate = (account: AccountRow): boolean =>
+    operatorRank >= GROUP_RANK.Owner || highestRank(account.groups) < operatorRank
+
+  // 列表读到未登录说明会话在中途失效，回上层重新走 whoami，而不是留在空表
   useEffect(() => {
-    if (!toast) {
-      return
+    if (list.error?.code === 'unauthenticated') {
+      onSessionLost()
     }
-    const timer = window.setTimeout(() => setToast(null), 3000)
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [toast])
+  }, [list.error, onSessionLost])
 
   const beginOperation = (): boolean => {
     if (busyRef.current) {
@@ -224,10 +292,6 @@ export function AccountsPage() {
     setBusy(false)
   }
 
-  const showToast = (tone: ToastMessage['tone'], text: string) => {
-    setToast({ tone, text })
-  }
-
   const closeDialog = () => {
     if (!busyRef.current) {
       setDialog(null)
@@ -241,88 +305,69 @@ export function AccountsPage() {
   }
 
   const openPassword = (account: AccountRow) => {
-    if (!busyRef.current) {
+    if (!busyRef.current && canOperate(account)) {
       setDialog({ kind: 'password', accountId: account.id })
     }
   }
 
   const openDelete = (account: AccountRow) => {
-    if (!busyRef.current && !account.self) {
+    if (!busyRef.current && canOperate(account) && !account.self) {
       setDialog({ kind: 'delete', accountId: account.id })
     }
-  }
-
-  const handleLogin = async (username: string, password: string): Promise<string | null> => {
-    if (!beginOperation()) {
-      return '操作进行中，请稍候'
-    }
-    await delay()
-    const match = accounts.find(
-      (account) => account.username.toLowerCase() === username.trim().toLowerCase()
-    )
-    // 样本阶段不校验真实密码；保留“密码非空”这一步，登录后的 self 标记按用户切换
-    if (!match || !password) {
-      endOperation()
-      return '用户名或密码错误'
-    }
-    setAccounts((prev) => prev.map((account) => ({ ...account, self: account.id === match.id })))
-    setAuth({
-      authenticated: true,
-      username: match.username,
-      groups: match.groups,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    })
-    endOperation()
-    showToast('success', `欢迎回来，${match.username}`)
-    return null
-  }
-
-  const handleLogout = async () => {
-    if (!beginOperation()) {
-      return
-    }
-    await delay()
-    setAccounts((prev) => prev.map((account) => ({ ...account, self: false })))
-    setAuth({ authenticated: false })
-    setDialog(null)
-    endOperation()
-    showToast('success', '已退出登录')
   }
 
   const handleAddAccount = async (values: AddAccountValues) => {
     if (!beginOperation()) {
       return
     }
-    await delay()
-    const now = new Date()
-    const groups: AccountGroup[] = values.role === 'Admin' ? ['User', 'Admin'] : ['User']
-    setAccounts((prev) => [
-      ...prev,
-      {
-        id: `acct-${now.getTime()}-${prev.length}`,
+    try {
+      // 契约：省略 groups 时后端默认 ["User"]，Admin 只有不传 groups 才能创建普通成员；
+      // 显式传任何非空 groups 都需要 Owner，所以成员角色不能传 ['User']。
+      await host.request('account.add', {
         username: values.username,
-        groups,
-        disabled: false,
-        createdAt: now.toISOString(),
-        self: false,
-      },
-    ])
-    setDialog(null)
-    endOperation()
-    showToast('success', `已添加用户 ${values.username}`)
+        password: values.password,
+        ...(values.role === 'Admin' ? { groups: ['User', 'Admin'] } : {}),
+      })
+      setDialog(null)
+      showToast('success', `已添加用户 ${values.username}`)
+      list.reload()
+    } catch (failure) {
+      const error = normalizeHostError(failure)
+      showToast('error', failureToast('add', error))
+      if (error.code === 'unauthenticated') {
+        onSessionLost()
+      }
+    } finally {
+      endOperation()
+    }
   }
 
   const handleChangePassword = async (password: string) => {
     const target =
       dialog?.kind === 'password' ? accounts.find((a) => a.id === dialog.accountId) : null
     // 对话框已经校验过；页面侧再守一次，避免无效密码被当成成功
-    if (!target || password.length < 8 || !beginOperation()) {
+    if (!target || !beginOperation()) {
       return
     }
-    await delay()
-    setDialog(null)
-    endOperation()
-    showToast('success', `已更新 ${target.username} 的密码`)
+    try {
+      await host.request('account.password', { username: target.username, password })
+      setDialog(null)
+      showToast('success', `已更新 ${target.username} 的密码`)
+      if (target.self) {
+        // 重置自己的密码会吊销当前会话，直接回登录态重新确认
+        onSessionLost()
+      } else {
+        list.reload()
+      }
+    } catch (failure) {
+      const error = normalizeHostError(failure)
+      showToast('error', failureToast('password', error))
+      if (error.code === 'unauthenticated') {
+        onSessionLost()
+      }
+    } finally {
+      endOperation()
+    }
   }
 
   const handleDeleteAccount = async () => {
@@ -331,11 +376,20 @@ export function AccountsPage() {
     if (!target || target.self || !beginOperation()) {
       return
     }
-    await delay()
-    setAccounts((prev) => prev.filter((account) => account.id !== target.id))
-    setDialog(null)
-    endOperation()
-    showToast('success', `已删除账户 ${target.username}`)
+    try {
+      await host.request('account.delete', { username: target.username })
+      setDialog(null)
+      showToast('success', `已删除账户 ${target.username}`)
+      list.reload()
+    } catch (failure) {
+      const error = normalizeHostError(failure)
+      showToast('error', failureToast('delete', error))
+      if (error.code === 'unauthenticated') {
+        onSessionLost()
+      }
+    } finally {
+      endOperation()
+    }
   }
 
   const passwordTarget =
@@ -352,54 +406,55 @@ export function AccountsPage() {
       <PageHead
         title="账户"
         actions={
-          auth.authenticated ? (
-            <Button tone="primary" icon={<PlusIcon />} disabled={busy} onClick={openAdd}>
-              添加用户
-            </Button>
-          ) : undefined
+          <Button tone="primary" icon={<PlusIcon />} disabled={frozen} onClick={openAdd}>
+            添加用户
+          </Button>
         }
       />
       <PageBody>
-        {auth.authenticated ? (
-          <>
-            <Card className={styles.currentCard}>
-              <span className={styles.avatar} aria-hidden="true">
-                {initials(auth.username ?? '')}
-              </span>
-              <div className={styles.userInfo}>
-                <div className={styles.userLine}>
-                  <span className={styles.userName}>{auth.username ?? '—'}</span>
-                  <Badge>{roleLabel(auth.groups)}</Badge>
-                </div>
-                <span className={styles.userSub}>当前登录</span>
-              </div>
-              <Button
-                tone="secondary"
-                className={styles.logout}
-                disabled={busy}
-                onClick={handleLogout}
-              >
-                退出
-              </Button>
-            </Card>
+        <Card className={styles.currentCard}>
+          <span className={styles.avatar} aria-hidden="true">
+            {initials(auth.username ?? '')}
+          </span>
+          <div className={styles.userInfo}>
+            <div className={styles.userLine}>
+              <span className={styles.userName}>{auth.username ?? '—'}</span>
+              <Badge>{roleLabel(auth.groups)}</Badge>
+            </div>
+            <span className={styles.userSub}>当前登录</span>
+          </div>
+          <Button tone="secondary" className={styles.logout} disabled={frozen} onClick={onLogout}>
+            退出
+          </Button>
+        </Card>
 
-            <p className={styles.note}>账户用于登录 Web 端和 GUI</p>
+        <p className={styles.note}>账户用于登录 Web 端和桌面端</p>
 
-            <Card grow clip>
-              <div className={styles.tableScroll}>
-                <Table
-                  caption="账户列表"
-                  columns={COLUMNS}
-                  rows={accounts}
-                  rowKey={(row) => row.id}
-                  actions={{
-                    width: '34%',
-                    render: (row) => (
+        {list.error ? (
+          <ReadErrorCard
+            title="无法加载账户列表"
+            error={list.error}
+            busy={list.loading}
+            onRetry={list.reload}
+          />
+        ) : list.data ? (
+          <Card grow clip>
+            <div className={styles.tableScroll}>
+              <Table
+                caption="账户列表"
+                columns={COLUMNS}
+                rows={accounts}
+                rowKey={(row) => row.id}
+                actions={{
+                  width: '34%',
+                  render: (row) => {
+                    const operable = canOperate(row)
+                    return (
                       <>
                         <TextButton
                           tone="accent"
                           aria-label={`修改 ${row.username} 的密码`}
-                          disabled={busy}
+                          disabled={frozen || !operable}
                           onClick={() => openPassword(row)}
                         >
                           改密码
@@ -409,28 +464,28 @@ export function AccountsPage() {
                           aria-label={
                             row.self ? '当前登录账户不能删除' : `删除账户 ${row.username}`
                           }
-                          disabled={busy || row.self}
+                          disabled={frozen || !operable || row.self}
                           onClick={() => openDelete(row)}
                         >
                           删除
                         </TextButton>
                       </>
-                    ),
-                  }}
-                />
-              </div>
-              <CardFooter>共 {accounts.length} 个账户</CardFooter>
-            </Card>
-          </>
+                    )
+                  },
+                }}
+              />
+            </div>
+            <CardFooter>共 {accounts.length} 个账户</CardFooter>
+          </Card>
         ) : (
-          <LoginCard busy={busy} onLogin={handleLogin} />
+          <LoadingCard title="正在加载账户…" description="账户列表来自本机 ipc。" />
         )}
       </PageBody>
 
       <AddAccountDialog
         open={dialog?.kind === 'add'}
         busy={busy}
-        existingUsernames={accounts.map((account) => account.username)}
+        canAssignAdmin={canAssignAdmin}
         onClose={closeDialog}
         onSubmit={handleAddAccount}
       />
@@ -448,11 +503,154 @@ export function AccountsPage() {
         onClose={closeDialog}
         onConfirm={handleDeleteAccount}
       />
-      {toast ? (
-        <Toast tone={toast.tone} className={styles.toast}>
-          {toast.text}
-        </Toast>
-      ) : null}
+    </>
+  )
+}
+
+export function AccountsPage() {
+  const host = useHost()
+  const whoami = useRequest<AuthState>('auth.whoami')
+  const { reload: reloadWhoami } = whoami
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [sessionBusy, setSessionBusy] = useState(false)
+  // 登录 / 退出的在途标记也放 ref：whoami 重新拉取期间 state 可能还没刷新
+  const sessionBusyRef = useRef(false)
+
+  useEffect(() => {
+    if (!toast) {
+      return
+    }
+    const timer = window.setTimeout(() => setToast(null), 3000)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [toast])
+
+  // 登录 / 退出后等 whoami 回来再解除禁用，避免在登录卡与账户视图之间重复点击
+  useEffect(() => {
+    if (whoami.loading || !sessionBusyRef.current) {
+      return
+    }
+    sessionBusyRef.current = false
+    setSessionBusy(false)
+  }, [whoami.loading])
+
+  const showToast = useCallback((tone: ToastTone, text: string) => {
+    setToast({ tone, text })
+  }, [])
+
+  const handleSessionLost = useCallback(() => {
+    reloadWhoami()
+  }, [reloadWhoami])
+
+  const beginSession = (): boolean => {
+    if (sessionBusyRef.current) {
+      return false
+    }
+    sessionBusyRef.current = true
+    setSessionBusy(true)
+    return true
+  }
+
+  const endSession = () => {
+    sessionBusyRef.current = false
+    setSessionBusy(false)
+  }
+
+  const handleLogin = async (username: string, password: string): Promise<string | null> => {
+    if (!beginSession()) {
+      return '操作进行中，请稍候'
+    }
+    try {
+      await host.request('auth.login', { username: username.trim(), password })
+    } catch (failure) {
+      endSession()
+      const error = normalizeHostError(failure)
+      if (error.code === 'unauthenticated') {
+        return '用户名或密码错误'
+      }
+      showToast('error', `${error.code}: ${error.message}`)
+      return '登录失败，请稍后重试'
+    }
+    // 成功后以 whoami 为准确认会话，列表会在 authenticated 为 true 后自行拉取
+    showToast('success', `欢迎回来，${username.trim()}`)
+    reloadWhoami()
+    return null
+  }
+
+  const handleLogout = async () => {
+    if (!beginSession()) {
+      return
+    }
+    try {
+      await host.request('auth.logout')
+    } catch (failure) {
+      endSession()
+      const error = normalizeHostError(failure)
+      showToast('error', `${error.code}: ${error.message}`)
+      return
+    }
+    showToast('success', '已退出登录')
+    reloadWhoami()
+  }
+
+  const toastNode = toast ? (
+    <Toast tone={toast.tone} className={styles.toast}>
+      {toast.text}
+    </Toast>
+  ) : null
+
+  if (whoami.error) {
+    return (
+      <>
+        <PageHead title="账户" />
+        <PageBody>
+          <ReadErrorCard
+            title="无法读取登录状态"
+            error={whoami.error}
+            busy={whoami.loading}
+            onRetry={reloadWhoami}
+          />
+        </PageBody>
+        {toastNode}
+      </>
+    )
+  }
+
+  if (!whoami.data) {
+    return (
+      <>
+        <PageHead title="账户" />
+        <PageBody>
+          <LoadingCard title="正在读取登录状态…" description="登录态由本机 ipc 提供。" />
+        </PageBody>
+        {toastNode}
+      </>
+    )
+  }
+
+  if (whoami.data.authenticated) {
+    return (
+      <>
+        <AccountsPanel
+          auth={whoami.data}
+          sessionBusy={sessionBusy}
+          onLogout={handleLogout}
+          onSessionLost={handleSessionLost}
+          showToast={showToast}
+        />
+        {toastNode}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <PageHead title="账户" />
+      <PageBody>
+        <LoginCard busy={sessionBusy} onLogin={handleLogin} />
+      </PageBody>
+      {toastNode}
     </>
   )
 }

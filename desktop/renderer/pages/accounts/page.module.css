@@ -95,6 +95,15 @@
   color: var(--text-2);
 }
 
+/* 读失败 / 加载中：在卡片剩余高度里居中，避免和空表混淆 */
+.stateArea {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-20);
+}
+
 /* 未登录：在剩余高度里居中一张窄卡，不抢页面标题 */
 .loginArea {
   flex: 1;
@@ -135,13 +144,16 @@
   margin-top: var(--sp-16);
 }
 
-/* 错误位始终占一行，提示出现时卡片不跳动 */
+/* 出错时才占位：常显一行 11px 会在密码和按钮之间留出一段说不清的空洞 */
 .loginError {
-  min-height: var(--lh-11);
   margin: 0;
   font-size: var(--fs-11);
   line-height: var(--lh-11);
   color: var(--danger-ink);
+}
+
+.loginError:empty {
+  display: none;
 }
 
 .loginSubmit {

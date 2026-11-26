@@ -19,3 +19,10 @@
   font-weight: var(--fw-medium);
   color: var(--text-2);
 }
+
+/* 非 Owner 被禁用「管理员」时给出原因，避免看起来像坏了 */
+.roleNote {
+  font-size: var(--fs-11);
+  line-height: var(--lh-11);
+  color: var(--text-3);
+}

@@ -15,6 +15,11 @@ export interface AddAccountValues {
 
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
 
+/** 契约按 UTF-8 字节数限制 8-1024；中文密码不能用 string.length 判断 */
+function passwordBytes(value: string): number {
+  return new TextEncoder().encode(value).length
+}
+
 const ROLE_OPTIONS: ReadonlyArray<SegmentedOption<AddAccountRole>> = [
   { value: 'User', label: '成员' },
   { value: 'Admin', label: '管理员' },
@@ -28,7 +33,8 @@ interface AddErrors {
 interface AddAccountDialogProps {
   open: boolean
   busy: boolean
-  existingUsernames: readonly string[]
+  /** 只有 Owner 能指定非空 groups；Admin 只能创建普通成员 */
+  canAssignAdmin: boolean
   onClose: () => void
   onSubmit: (values: AddAccountValues) => void
 }
@@ -36,7 +42,7 @@ interface AddAccountDialogProps {
 export function AddAccountDialog({
   open,
   busy,
-  existingUsernames,
+  canAssignAdmin,
   onClose,
   onSubmit,
 }: AddAccountDialogProps) {
@@ -68,15 +74,13 @@ export function AddAccountDialog({
       next.username = '请输入用户名'
     } else if (!USERNAME_PATTERN.test(name)) {
       next.username = '用户名只能包含字母、数字或 . _ -（1–64 位）'
-    } else if (existingUsernames.some((item) => item.toLowerCase() === name.toLowerCase())) {
-      next.username = '用户名已存在'
     }
     if (!password) {
       next.password = '请输入初始密码'
-    } else if (password.length < 8) {
-      next.password = '初始密码至少 8 位'
-    } else if (password.length > 1024) {
-      next.password = '密码不能超过 1024 位'
+    } else if (passwordBytes(password) < 8) {
+      next.password = '初始密码至少 8 字节'
+    } else if (passwordBytes(password) > 1024) {
+      next.password = '密码不能超过 1024 字节'
     }
     if (next.username || next.password) {
       setErrors(next)
@@ -133,21 +137,27 @@ export function AddAccountDialog({
           fullWidth
           disabled={busy}
           error={errors.password}
-          hint={errors.password ? undefined : '至少 8 位'}
+          hint={errors.password ? undefined : '至少 8 字节'}
         />
         <div className={styles.roleGroup}>
           <span className={styles.roleLabel}>角色</span>
           <Segmented
             label="角色"
-            options={ROLE_OPTIONS.map((option) => ({ ...option, disabled: busy }))}
+            options={ROLE_OPTIONS.map((option) => ({
+              ...option,
+              disabled: busy || (option.value === 'Admin' && !canAssignAdmin),
+            }))}
             value={role}
             width={332}
             onChange={(next) => {
-              if (!busy) {
+              if (!busy && (next === 'User' || canAssignAdmin)) {
                 setRole(next)
               }
             }}
           />
+          {canAssignAdmin ? null : (
+            <span className={styles.roleNote}>创建管理员需要 Owner 权限</span>
+          )}
         </div>
       </form>
     </Dialog>
@@ -201,10 +211,10 @@ export function ChangePasswordDialog({
     const next: PasswordErrors = {}
     if (!password) {
       next.password = '请输入新密码'
-    } else if (password.length < 8) {
-      next.password = '新密码至少 8 位'
-    } else if (password.length > 1024) {
-      next.password = '密码不能超过 1024 位'
+    } else if (passwordBytes(password) < 8) {
+      next.password = '新密码至少 8 字节'
+    } else if (passwordBytes(password) > 1024) {
+      next.password = '密码不能超过 1024 字节'
     }
     if (!confirm) {
       next.confirm = '请再次输入新密码'
@@ -251,7 +261,7 @@ export function ChangePasswordDialog({
           fullWidth
           disabled={busy}
           error={errors.password}
-          hint={errors.password ? undefined : '至少 8 位'}
+          hint={errors.password ? undefined : '至少 8 字节'}
         />
         <Field
           label="确认密码"
