@@ -1381,6 +1381,39 @@ class LegacyBackupMigrationTest(ControllerTestCase):
         self.drain()
         return controller, transport
 
+    def test_migration_before_info_is_deferred_without_command(self) -> None:
+        transport = FakeTransport(self.target)
+        controller = self.make_controller(transport=transport)
+
+        controller.migrate_legacy_backup_dir("/old/backups")
+        self.drain()
+
+        self.assertEqual(transport.calls, [])
+        self.assertEqual(controller._legacy_backup_pending, "/old/backups")
+        self.assertIsNone(controller.state.notice)
+
+    def test_migration_runs_once_after_facts_loaded(self) -> None:
+        transport = FakeTransport(self.target)
+        controller = self.make_controller(transport=transport)
+        controller.migrate_legacy_backup_dir("/old/backups")
+        transport.script(("info",), info_result())
+        transport.script(("config", "set"), ok(("config", "set")))
+        transport.script(("info",), info_result(backup_dir="/old/backups"))
+
+        controller.bootstrap()
+        self.drain()
+
+        sets = [argv for argv in transport.argv_calls if argv[:2] == ("config", "set")]
+        self.assertEqual(
+            sets,
+            [("config", "set", "backup_dir", "/old/backups", "--data-dir", "/data")],
+        )
+        self.assertEqual(
+            len([argv for argv in transport.argv_calls if argv[0] == "info"]), 2
+        )
+        self.assertEqual(controller._legacy_backup_pending, "")
+        self.assert_notice(controller, "已把旧备份地址写入 config.json")
+
     def test_migration_writes_default_backup_dir_and_rereads_info(self) -> None:
         controller, transport = self.bootstrapped()
         transport.script(("config", "set"), ok(("config", "set")))

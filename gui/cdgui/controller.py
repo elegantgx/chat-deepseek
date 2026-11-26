@@ -117,6 +117,8 @@ class Controller:
         self._serve_epoch = 0
         self._stopping_foreground = False
         self._shutdown = False
+        # v1 备份地址迁移如果先于 info 到达，先暂存，等 host 入库后再试。
+        self._legacy_backup_pending = ""
 
     # ---- 只读接口 -----------------------------------------------------
 
@@ -1157,6 +1159,8 @@ class Controller:
             return
         host = rules.host_config(state)
         if host is None:
+            # C6 启动时会立刻调用，此时 info 还没回来；等 facts_loaded 再迁移。
+            self._legacy_backup_pending = legacy
             return
         if host.backup_dir != server_config.default_backup_dir(host.data_dir):
             # 用户已经自定义过备份地址，不要覆盖。
@@ -1426,6 +1430,10 @@ class Controller:
         host = HostConfig.from_info(state.target.key, info)
         self._store.update(lambda current: reducers.facts_loaded(current, host))
         self._mark_ready()
+        legacy = self._legacy_backup_pending
+        if legacy:
+            self._legacy_backup_pending = ""
+            self.migrate_legacy_backup_dir(legacy)
 
     def _info_failed(self, error: BaseException) -> None:
         failure = _failure_of(error)
