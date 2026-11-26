@@ -1,0 +1,92 @@
+/* 备份页：警告条直接铺在纸面上，其余内容都在卡片里（见 docs/desktop-visual.md）。 */
+
+.banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 40px;
+  padding: var(--sp-10) var(--sp-14);
+  border-radius: var(--r-10);
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+
+.banner svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  stroke-width: 1.5;
+}
+
+.bannerText {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+}
+
+/* TextButton 没有 warning 色调；这里只补颜色，尺寸和焦点环仍走组件 */
+button.bannerAction {
+  margin-left: auto;
+  color: var(--warning-ink);
+  font-weight: var(--fw-semibold);
+}
+
+button.bannerAction:hover:not(:disabled) {
+  color: var(--warning-ink);
+}
+
+.tableScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.file,
+.time,
+.size {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-12);
+}
+
+.file {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-medium);
+}
+
+.time,
+.size {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* 备份目录可能很长：等宽字体 + 单行省略，完整路径留在 title 里。
+   用视口宽度而不是百分比：CardFooter 的 end 是收缩到内容的 flex 项，
+   子项的百分比会参与自身宽度计算，导致路径被截得过短。 */
+.footerDir {
+  max-width: 42vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.toast {
+  position: fixed;
+  right: var(--page-x);
+  bottom: var(--sp-24);
+  z-index: 60;
+  max-width: min(520px, calc(100vw - var(--page-x) * 2));
+}
