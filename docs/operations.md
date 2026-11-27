@@ -71,9 +71,9 @@ pnpm dev
 - 三个 workflow 步骤一致：checkout → pnpm 12.23 / Node 24 → `pnpm install --frozen-lockfile`（electron-winstaller 的构建审批记录在 `pnpm-workspace.yaml`）→ `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）→ Go 构建 → `pnpm desktop:build` → electron-builder → artifact/Release；Linux 额外打服务端 ZIP。
 - Go 二进制统一由 `scripts/build-desktop-backend.mjs` 构建：`CGO_ENABLED=0`、`-trimpath`、`-ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}"`，输出 `desktop/build/backend/bin/chat-deepseek[.exe]`。tag 运行时 `VERSION` 是 tag 名（带 `v`），分支运行是提交 SHA；Linux 服务端 ZIP 复用同一份产物，macOS/Windows 只有桌面端包。
 - 桌面端配置在 `electron-builder.yml`：`appId=com.chatdeepseek.desktop`、`productName=chat-deepseek`、图标取 `desktop/build/whale.{png,icns,ico}`、`extraResources` 把 `desktop/build/backend/bin` 放到 `resources/bin`。输出在 `release/desktop/`，不复用根 `dist/`。
-- 平台 target：Linux/macOS 出 `zip`（x64 / arm64），Windows 出 `nsis` 单文件安装包（x64）；统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制；macOS 仍是 `identity: null` 未签名。
+- 平台 target：Linux/macOS 出 `zip`（x64 / arm64），Windows 出 `nsis` 单文件安装包（x64），再压成只含 setup.exe 的 zip；统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制；macOS 仍是 `identity: null` 未签名。
 - 服务端 ZIP 只发 Linux：`chat-deepseek-v<version>-linux-server-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`。
-- 桌面端产物：`chat-deepseek-v<version>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64-setup.exe`；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`，名字里的 `v` 与发布 tag 一致。Linux zip 根就是应用目录，macOS zip 根是 `chat-deepseek.app`，Windows 安装后同样在 `<安装目录>/resources/bin/` 放 Go 后端（也是 CLI）。
+- 桌面端产物：`chat-deepseek-v<version>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`（内含 `...-setup.exe`）；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`，名字里的 `v` 与发布 tag 一致。Linux zip 根就是应用目录，macOS zip 根是 `chat-deepseek.app`，Windows zip 根只有一个 setup exe，安装后在 `<安装目录>/resources/bin/` 放 Go 后端（也是 CLI）。
 - 三个 workflow 可并行；tag 上运行时把服务端 ZIP（Linux）与桌面端包一起上传到同一个 Release，创建和上传做 6 次重试，避免同时创建时的竞态。分支运行只保留 artifacts（30 天）。
 - 打包会按需下载 Electron、NSIS 与 7zip 工具集：首次运行需要网络；Windows 用 electron-builder 自带的 NSIS，不需要额外 Python/PyInstaller。
 - Windows setup 未签名；macOS zip 未签名、无公证。

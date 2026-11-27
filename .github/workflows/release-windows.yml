@@ -57,7 +57,7 @@ jobs:
         run: pnpm desktop:backend
       - name: Build desktop bundles
         run: pnpm desktop:build
-      - name: Package desktop (NSIS)
+      - name: Package desktop (NSIS + zip)
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
@@ -70,12 +70,22 @@ jobs:
           if (-not (Test-Path $backend)) { throw "backend binary missing from win-unpacked" }
           & $backend version
           if ($LASTEXITCODE -ne 0) { throw "backend binary failed to run" }
-          Get-Item $installer.FullName | Format-List Length,FullName
+
+          # 对外只发 zip，zip 根就是这一个 setup exe：解压后双击即可，不用在文件堆里找
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $archive = "release\desktop\chat-deepseek-v$version-windows-amd64.zip"
+          Remove-Item -Force $archive -ErrorAction SilentlyContinue
+          Compress-Archive -Path $installer.FullName -DestinationPath $archive -Force
+          Remove-Item -Recurse -Force tmp\verify -ErrorAction SilentlyContinue
+          Expand-Archive -Path $archive -DestinationPath tmp\verify -Force
+          $entries = @(Get-ChildItem -Path tmp\verify -File)
+          if ($entries.Count -ne 1 -or $entries[0].Extension -ne ".exe") { throw "zip 根应只有一个 setup exe" }
+          Get-Item $archive, $installer.FullName | Format-Table Length,FullName
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-windows-amd64
-          path: release/desktop/*-windows-amd64-setup.exe
+          path: release/desktop/*-windows-amd64.zip
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
@@ -86,7 +96,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
           $tag = $env:GITHUB_REF_NAME
-          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64-setup.exe" | Select-Object -First 1
+          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
           if ($null -eq $desktop) { throw "release asset not found" }
           # gh 把资产参数当作 glob；Windows 反斜杠会被当成转义符。
           $asset = $desktop.FullName -replace '\\', '/'

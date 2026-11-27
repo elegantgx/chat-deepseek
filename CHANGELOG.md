@@ -21,7 +21,7 @@
 
 ### 打包与发布
 
-- 桌面端用 electron-builder 打包：Linux/macOS 出便携 zip（`-linux-amd64` / `-macos-arm64`），Windows 出单文件 NSIS 安装包（`-windows-amd64-setup.exe`），不再出 dmg/tar.gz；Go 后端（也是 CLI）随包放在 `resources/bin/`。
+- 桌面端用 electron-builder 打包：Linux/macOS 出便携 zip（`-linux-amd64` / `-macos-arm64`），Windows 出内含单文件 NSIS 安装包的 zip（`-windows-amd64.zip`），不再出 dmg/tar.gz；Go 后端（也是 CLI）随包放在 `resources/bin/`。
 - 服务端只保留 Linux 的 headless ZIP（`-linux-server-amd64`，仅二进制与三份文档）；macOS/Windows 的纯服务端包并入桌面端包。
 - 三条发布流水线去掉 PyInstaller/PySide6，改为「Web 构建 → Go 二进制 → 桌面端构建 → electron-builder → 发布」。
 

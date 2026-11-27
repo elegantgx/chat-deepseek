@@ -276,7 +276,7 @@ pnpm desktop:build
 # 3) 当前平台的产物（名字里的 v 与发布 tag 一致）
 pnpm desktop:pack:linux   # release/desktop/chat-deepseek-v<version>-linux-amd64.zip
 pnpm desktop:pack:mac     # ...-macos-arm64.zip（未签名，identity: null）
-pnpm desktop:pack:win     # ...-windows-amd64-setup.exe（NSIS 安装包）
+pnpm desktop:pack:win     # ...-windows-amd64-setup.exe（NSIS；发布时再压成只含它的 zip）
 ```
 
 不想用脚本时等价于：
@@ -296,8 +296,9 @@ resources/
 ```
 
 macOS 的 zip 根是 `chat-deepseek.app`，后端在 `chat-deepseek.app/Contents/Resources/bin/chat-deepseek`。
-Windows 只出 NSIS 单文件安装包：双击安装到用户目录，后端同样在 `<安装目录>\resources\bin\chat-deepseek.exe`；
-zip 解压出来是一堆 dll/resources，普通用户得在一堆文件里找 exe，所以 Windows 不再提供 zip。
+Windows 先出 NSIS 单文件安装包，发布时再由 workflow 压成只含 setup.exe 的 zip：解压后双击 setup
+安装到用户目录，后端同样在 `<安装目录>\resources\bin\chat-deepseek.exe`；不再直接分发解压后满屏
+dll/resources、需要自己找 exe 的 zip。
 
 - `extraResources` 把 `desktop/build/backend/bin/` 复制到 `resources/bin/`；主进程在 `app.isPackaged`
   时从 `process.resourcesPath` 取（Windows 文件名是 `chat-deepseek.exe`）。开发态仍先看
