@@ -1,6 +1,10 @@
 node_modules/
 dist/
 build/
+# 例外：桌面端的打包资源（图标）必须进版本库，否则 CI 打包找不到图标
+!/desktop/build/
+# 例外里的例外：Go 二进制由 scripts/build-desktop-backend.mjs 现场构建
+/desktop/build/backend/
 .pnpm-store/
 .cache/
 *.log
@@ -22,10 +26,6 @@ coverage.out
 /internal/webui/dist/*
 !/internal/webui/dist/.gitkeep
 
-# Release builds (PyInstaller / local packaging)
-/chat-deepseek-gui
-/chat-deepseek-gui.exe
-/dist-gui/
-/build-gui/
+# Release staging (CI assembles artifacts here)
 /release/
 /*.spec

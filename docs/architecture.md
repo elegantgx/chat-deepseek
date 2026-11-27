@@ -8,7 +8,7 @@
 - **Web 前端**（`src/`，React 18 + TS strict + zustand + rspack）只做交互与渲染，所有数据经同源 `/api/v1`。
 - **Go 服务端**（`internal/`）保存账户、会话、附件、设置、API Key，并代理 DeepSeek 的 SSE / ASR / TTS。
 - **CLI**（`cmd/chat-deepseek` + `internal/cli`）是唯一管理入口：`setup`、`serve`、`backup`、`user ...`、`login`、`info`、`config set`、`service`。
-- **GUI**（`gui/`，PySide6）只是 CLI 的图形外壳，见 `docs/gui.md`。
+- **桌面端**（`desktop/`，Electron）是本地图形外壳：主进程管窗口、单实例与请求转发，渲染层经本机 `ipc` 控制服务，浏览器仍只走 `/api/v1`。
 - 依赖方向：页面/组件 → services → `api/client`；Go 侧 cmd 装配依赖，`internal/*` 不写全局状态。
 
 ## 2. 数据模型
@@ -55,10 +55,10 @@
 ## 4. CLI 契约（冻结）
 
 - 文本输出就是契约，不加 `--json`：`user list` 表头、`whoami` 的 `username\tgroups\texpires`、`backup list` 的 `NAME\tSIZE\tTIME`、`backup` 的 `备份已写入 <path>`、`serve` 启动前缀、`version` 格式都不可随意改。
-- `info` 输出固定顺序 `key=value`：version/os/arch/binary/data_dir/initialized/listen/public_url/api_origin/backup_dir/service_*；`service status` 输出其中 `service_*` 七项。`info` 只读，不创建数据库、`config.json` 或 WAL。
+- `info` 输出固定顺序 `key=value`：`version/os/arch/binary/data_dir/initialized/listen/public_url/api_origin/backup_dir/service_*`；`service status` 输出其中 `service_*` 七项。`info` 只读，不创建数据库、`config.json` 或 WAL。
 - 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` 未登录/过期、`4` 权限不足。
 - `info` / `config set` / `service` 不需要应用登录；`service` 仅 Linux systemd，默认 user unit，`--system` 需 root、`--run-as` 和显式 `--data-dir`；`service --help` 列出全部子命令。
-- 文本格式变更必须同步 `gui/parsing.py`、GUI 测试与 README。
+- 文本格式变更必须同步 README 与所有解析这些输出的调用方。
 
 ## 5. 核心流程
 
