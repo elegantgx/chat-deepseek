@@ -117,6 +117,12 @@
   padding: var(--sp-20);
 }
 
+/* 首次创建有三个字段，比登录卡宽一点，避免标签和错误文案换行 */
+.setupCard {
+  width: 340px;
+  padding: var(--sp-20);
+}
+
 .loginHeading {
   display: flex;
   flex-direction: column;

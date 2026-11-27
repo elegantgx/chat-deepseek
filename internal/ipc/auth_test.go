@@ -15,6 +15,7 @@ import (
 	"github.com/elegantgx/chat-deepseek/internal/account"
 	"github.com/elegantgx/chat-deepseek/internal/auth"
 	"github.com/elegantgx/chat-deepseek/internal/config"
+	"github.com/elegantgx/chat-deepseek/internal/database"
 )
 
 func TestAuthWhoamiWithoutSession(t *testing.T) {
@@ -25,15 +26,144 @@ func TestAuthWhoamiWithoutSession(t *testing.T) {
 		t.Fatalf("whoami: %+v", rpcErr)
 	}
 	identity := value.(authIdentity)
-	if identity.Authenticated || identity.Username != "" || identity.ExpiresAt != "" || len(identity.Groups) != 0 {
-		t.Fatalf("未登录时应只返回 authenticated:false，得到 %+v", identity)
+	if identity.Authenticated || identity.Initialized || identity.Username != "" || identity.ExpiresAt != "" || len(identity.Groups) != 0 {
+		t.Fatalf("未登录时应只返回 authenticated:false 与 initialized:false，得到 %+v", identity)
 	}
 	data, err := json.Marshal(identity)
 	if err != nil {
 		t.Fatalf("序列化: %v", err)
 	}
-	if string(data) != `{"authenticated":false}` {
+	if string(data) != `{"authenticated":false,"initialized":false}` {
 		t.Fatalf("JSON = %s", data)
+	}
+}
+
+func TestAuthWhoamiInitializedWithoutSession(t *testing.T) {
+	server, dir := newTestServer(t, "127.0.0.1:1")
+	seedActiveOwner(t, dir)
+
+	value, rpcErr := server.authWhoami()
+	if rpcErr != nil {
+		t.Fatalf("whoami: %+v", rpcErr)
+	}
+	identity := value.(authIdentity)
+	if identity.Authenticated || !identity.Initialized {
+		t.Fatalf("有 Owner 但未登录时应返回 initialized:true，得到 %+v", identity)
+	}
+}
+
+func TestAuthSetupCreatesFirstOwnerAndLogsIn(t *testing.T) {
+	server, dir := newTestServer(t, "127.0.0.1:1")
+
+	value, rpcErr := server.authSetup(jsonParams(t, map[string]string{
+		"username": "owner",
+		"password": testAccountPassword,
+	}))
+	if rpcErr != nil {
+		t.Fatalf("setup: %+v", rpcErr)
+	}
+	identity := value.(authIdentity)
+	if !identity.Authenticated || !identity.Initialized || identity.Username != "owner" {
+		t.Fatalf("setup 返回 %+v", identity)
+	}
+	if len(identity.Groups) != 2 || identity.Groups[0] != "User" || identity.Groups[1] != "Owner" {
+		t.Fatalf("groups = %v，期望 [User Owner]", identity.Groups)
+	}
+	if _, err := server.readOwnSession(); err != nil {
+		t.Fatalf("setup 后应写入会话文件: %v", err)
+	}
+	initialized, err := database.Initialized(dir)
+	if err != nil || !initialized {
+		t.Fatalf("setup 后应存在活动 Owner：initialized=%v err=%v", initialized, err)
+	}
+
+	db, err := openExistingDatabase(dir)
+	if err != nil {
+		t.Fatalf("打开数据库: %v", err)
+	}
+	var users int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&users); err != nil {
+		_ = db.Close()
+		t.Fatalf("统计用户: %v", err)
+	}
+	_ = db.Close()
+	if users != 1 {
+		t.Fatalf("setup 后用户数 = %d，期望 1", users)
+	}
+
+	// setup 直接登录；退出后能用刚设置的密码正常登录。
+	value, rpcErr = server.authWhoami()
+	if rpcErr != nil || !value.(authIdentity).Authenticated {
+		t.Fatalf("setup 后 whoami = %+v / %+v", value, rpcErr)
+	}
+	if _, rpcErr := server.authLogout(nil); rpcErr != nil {
+		t.Fatalf("logout: %+v", rpcErr)
+	}
+	loginAs(t, server, "owner", testAccountPassword)
+
+	// 已有活动 Owner 时再 setup 必须拒绝，不能变成「凭接口重置管理员」。
+	_, rpcErr = server.authSetup(jsonParams(t, map[string]string{
+		"username": "another",
+		"password": testAccountPassword,
+	}))
+	if rpcErr == nil || rpcErr.Code != codeConflict {
+		t.Fatalf("重复 setup = %+v，期望 conflict", rpcErr)
+	}
+	db, err = openExistingDatabase(dir)
+	if err != nil {
+		t.Fatalf("打开数据库: %v", err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&users); err != nil {
+		_ = db.Close()
+		t.Fatalf("统计用户: %v", err)
+	}
+	_ = db.Close()
+	if users != 1 {
+		t.Fatalf("被拒绝的 setup 不应创建用户，当前 %d 个", users)
+	}
+}
+
+func TestAuthSetupValidatesInput(t *testing.T) {
+	cases := []struct {
+		name    string
+		params  map[string]any
+		message string
+	}{
+		{
+			name:    "缺少用户名",
+			params:  map[string]any{"password": testAccountPassword},
+			message: "缺少参数 username",
+		},
+		{
+			name:    "缺少密码",
+			params:  map[string]any{"username": "owner"},
+			message: "缺少参数 password",
+		},
+		{
+			name:    "非法用户名",
+			params:  map[string]any{"username": "bad name", "password": testAccountPassword},
+			message: "用户名需为 1-64 个字母、数字或 . _ -",
+		},
+		{
+			name:    "密码过短",
+			params:  map[string]any{"username": "owner", "password": "short"},
+			message: "密码至少 8 位",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server, dir := newTestServer(t, "127.0.0.1:1")
+			_, rpcErr := server.authSetup(jsonParams(t, tc.params))
+			if rpcErr == nil || rpcErr.Code != codeBadRequest {
+				t.Fatalf("setup = %+v，期望 bad_request", rpcErr)
+			}
+			if rpcErr.Message != tc.message {
+				t.Fatalf("message = %q，期望 %q", rpcErr.Message, tc.message)
+			}
+			if initialized, err := database.Initialized(dir); err != nil || initialized {
+				t.Fatalf("校验失败不应创建数据目录：initialized=%v err=%v", initialized, err)
+			}
+		})
 	}
 }
 

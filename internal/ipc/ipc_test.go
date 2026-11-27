@@ -305,6 +305,7 @@ func TestCapabilitiesMatchesRegistry(t *testing.T) {
 		"service.logs",
 		"auth.whoami",
 		"auth.login",
+		"auth.setup",
 		"auth.logout",
 		"account.list",
 		"account.add",

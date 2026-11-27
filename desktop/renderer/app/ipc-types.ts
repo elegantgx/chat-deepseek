@@ -83,9 +83,11 @@ export interface AccountList {
   accounts: AccountRow[]
 }
 
-/** `auth.whoami` / `auth.login` 的结果：未登录时只有 authenticated:false */
+/** `auth.whoami` / `auth.login` / `auth.setup` 的结果：未登录时不带账户字段 */
 export interface AuthState {
   authenticated: boolean
+  /** 数据目录里是否已有活动 Owner；false 表示首次使用，应引导创建第一个用户 */
+  initialized: boolean
   username?: string
   groups?: AccountGroup[]
   /** 会话过期时间，RFC 3339 */

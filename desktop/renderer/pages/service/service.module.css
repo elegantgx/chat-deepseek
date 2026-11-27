@@ -158,3 +158,29 @@
   z-index: 60;
   max-width: min(520px, calc(100vw - var(--page-x) * 2));
 }
+
+/* 首次使用：还没创建账户时服务无法启动，警告条铺在纸面上，和备份页同款 */
+.banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-height: 40px;
+  padding: var(--sp-10) var(--sp-14);
+  border-radius: var(--r-10);
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+
+.banner svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  stroke-width: 1.5;
+}
+
+.bannerText {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: var(--fw-medium);
+}

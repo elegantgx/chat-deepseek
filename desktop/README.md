@@ -343,7 +343,10 @@ XDG_CONFIG_HOME=$PWD/tmp/xdg /tmp/chat-deepseek-desktop-*/chat-deepseek --smoke
    （本地运行模式），停止/重启/日志都走这条路径；systemd 只是可选的「开机自启」增强。
    本地进程跟着 ipc 走——桌面端退出会停止服务；Windows/macOS 上 ipc 被强杀时没有 `Pdeathsig`，
    子进程可能残留（仅兜底路径，正常关闭会显式回收）。
-10. **GPU 崩溃自动退回软件合成**：没有 `/dev/dri`（容器、部分虚拟机）、上次 GPU 崩溃留下的标记、
+10. **首次使用在 GUI 里创建第一个用户**：`auth.whoami` 返回 `initialized:false` 时，账户页显示创建表单，
+    调 `auth.setup`；它只在没有活动 Owner 时可用，成功后直接建立登录态。没有 Owner 时 `serve` 会拒绝启动，
+    服务页把「启动服务」换成「新建用户」并给出警告条，点击直接进账户页。
+11. **GPU 崩溃自动退回软件合成**：没有 `/dev/dri`（容器、部分虚拟机）、上次 GPU 崩溃留下的标记、
     显式 `--disable-gpu` 三种情况都直接走软件合成。有 GPU 但驱动/沙箱不让用时，Chromium 会对 GPU 进程
     重试三次后以「GPU process isn't usable. Goodbye.」SIGTRAP 退出；主进程收到第一次
     `child-process-gone` 就写标记文件 `<userData>/gpu-software` 并干净退出（不做 `app.relaunch`，

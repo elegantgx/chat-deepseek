@@ -83,7 +83,7 @@ chat-deepseek ipc [--data-dir <dir>]
 | `unauthenticated`   | 未登录、登录过期，或 `auth.login` 的凭据错误                                                         | 3          | 是           |
 | `permission_denied` | 已登录但权限不足（账户操作、组管理）                                                                 | 4          | 是           |
 | `not_found`         | 方法不存在；备份文件不存在；账户不存在                                                               | —          | 是           |
-| `conflict`          | 资源冲突：用户名已被占用                                                                             | 1          | 是           |
+| `conflict`          | 资源冲突：用户名已被占用；`auth.setup` 时数据目录已有活动 Owner                                      | 1          | 是           |
 | `unavailable`       | 依赖的服务/能力不可用：服务运行中不能备份、systemd/journalctl 不可用、服务操作并发冲突、服务未初始化 | —          | 是           |
 
 错误对象只有 `code`、`message` 两个字段；`message` 用于诊断，不保证稳定，**不要解析它做逻辑判断**。
@@ -192,6 +192,7 @@ service.restart
 service.logs
 auth.whoami
 auth.login
+auth.setup
 auth.logout
 account.list
 account.add
@@ -224,6 +225,7 @@ service.uninstall
       "service.logs",
       "auth.whoami",
       "auth.login",
+      "auth.setup",
       "auth.logout",
       "account.list",
       "account.add",
@@ -535,20 +537,29 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 ### 4.12 `auth.whoami`
 
 读取当前 ipc 进程的登录态。不需要参数；未登录不是错误，返回 `authenticated:false`。
+同时回答数据目录是否已经初始化，客户端据此区分「首次使用」和「只是没登录」。
 
-| 字段            | 类型     | 可空       | 说明                                                 |
-| --------------- | -------- | ---------- | ---------------------------------------------------- |
-| `authenticated` | bool     | 否         | 是否已登录且会话有效                                 |
-| `username`      | string   | 仅 true 时 | 当前账户名                                           |
-| `groups`        | string[] | 仅 true 时 | 规范组名，按权限从低到高（`User`、`Admin`、`Owner`） |
-| `expiresAt`     | string   | 仅 true 时 | 会话过期时间，RFC 3339（带本地时区偏移）             |
+| 字段            | 类型     | 可空       | 说明                                                                 |
+| --------------- | -------- | ---------- | -------------------------------------------------------------------- |
+| `authenticated` | bool     | 否         | 是否已登录且会话有效                                                 |
+| `initialized`   | bool     | 否         | 数据目录里是否已有活动 Owner；false 时应引导创建第一个用户而非登录     |
+| `username`      | string   | 仅 true 时 | 当前账户名                                                           |
+| `groups`        | string[] | 仅 true 时 | 规范组名，按权限从低到高（`User`、`Admin`、`Owner`）                 |
+| `expiresAt`     | string   | 仅 true 时 | 会话过期时间，RFC 3339（带本地时区偏移）                             |
 
 基础 `User` 组始终存在；客户端应按最高权限组展示角色，不要依赖数组顺序。
 
-未登录 / 过期 / 会话失效时**只**返回：
+`initialized` 是只读检查，不会创建数据库；数据库不存在、损坏或读取失败时保守返回 `false`，
+真正的错误留给 `auth.setup`。未登录 / 过期 / 会话失效时**只**返回：
 
 ```json
-{ "jsonrpc": "2.0", "id": 1, "result": { "authenticated": false } }
+{ "jsonrpc": "2.0", "id": 1, "result": { "authenticated": false, "initialized": false } }
+```
+
+已有活动 Owner、只是还没登录时：
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "result": { "authenticated": false, "initialized": true } }
 ```
 
 已登录示例：
@@ -559,6 +570,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
   "id": 1,
   "result": {
     "authenticated": true,
+    "initialized": true,
     "username": "gx",
     "groups": ["User", "Owner"],
     "expiresAt": "2026-11-27T09:00:00+08:00"
@@ -604,6 +616,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
   "id": 2,
   "result": {
     "authenticated": true,
+    "initialized": true,
     "username": "gx",
     "groups": ["User", "Admin"],
     "expiresAt": "2026-11-27T09:00:00+08:00"
@@ -611,7 +624,46 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 }
 ```
 
-### 4.14 `auth.logout`
+### 4.14 `auth.setup`
+
+创建数据目录里的第一个 `Owner`，并直接建立当前 ipc 进程的登录态。这是 GUI 的首次使用入口；
+服务端 CLI 的对应命令是 `chat-deepseek setup`。
+
+参数：
+
+| 字段       | 类型   | 必填 | 说明                             |
+| ---------- | ------ | ---- | -------------------------------- |
+| `username` | string | 是   | 1–64 个字母、数字或 `.` `_` `-`  |
+| `password` | string | 是   | 明文密码，至少 8 字节、最多 1024 |
+
+- **只允许在没有活动 Owner 时调用**。已有活动 Owner 时返回 `conflict`，message 为
+  「这个数据目录已经有用户了；请直接登录」；不能拿它绕过登录重置管理员。
+- 与 CLI `setup` 一样，存在用户但没有活动 Owner（例如全部被禁用）时仍允许创建，
+  等价于重新初始化一个最高权限账户。
+- 数据库不存在时由本方法创建；成功后的返回形状与 `auth.login` 相同，
+  `initialized` 固定为 `true`，并写入会话文件（等价于执行了一次 `auth.login`）。
+- 参数非法返回 `bad_request`；数据库或会话文件写入失败返回 `internal`。
+  写会话失败时账户可能已经创建，客户端应重新调用 `auth.whoami` 确认状态，
+  而不是反复提交创建表单。
+- 密码、token 不会出现在日志或错误 message 里。
+
+成功示例：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "authenticated": true,
+    "initialized": true,
+    "username": "owner",
+    "groups": ["User", "Owner"],
+    "expiresAt": "2026-11-27T09:00:00+08:00"
+  }
+}
+```
+
+### 4.15 `auth.logout`
 
 吊销当前 ipc 进程的登录会话并删除会话文件。不需要参数，幂等：未登录时也返回成功。
 
@@ -621,7 +673,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 
 数据库不可用时仍会尽力删除本地会话文件；登录态在进程内立即失效。
 
-### 4.15 `account.list`
+### 4.16 `account.list`
 
 列出全部账户，需要 `Admin` 或 `Owner`。不需要参数。
 
@@ -658,7 +710,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 
 返回里没有密码哈希、token 或任何密钥字段。
 
-### 4.16 `account.add`
+### 4.17 `account.add`
 
 创建账户，需要 `Admin` 或 `Owner`。
 
@@ -682,7 +734,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 { "jsonrpc": "2.0", "id": 5, "result": { "ok": true } }
 ```
 
-### 4.17 `account.password`
+### 4.18 `account.password`
 
 重置账户密码，需要 `Admin` 或 `Owner`。
 
@@ -704,7 +756,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 { "jsonrpc": "2.0", "id": 6, "result": { "ok": true } }
 ```
 
-### 4.18 `account.delete`
+### 4.19 `account.delete`
 
 删除账户，需要 `Admin` 或 `Owner`。
 
@@ -727,7 +779,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 { "jsonrpc": "2.0", "id": 7, "result": { "ok": true } }
 ```
 
-### 4.19 `config.set`
+### 4.20 `config.set`
 
 写入 `config.json`，**不需要登录**（与 CLI `config set` 一致：继承启动 ipc 的操作系统用户）。
 返回值是与 `config.get` 相同的投影，表示保存后的生效值。
@@ -760,7 +812,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 }
 ```
 
-### 4.20 `service.install`
+### 4.21 `service.install`
 
 安装用户级 systemd unit，复用 `internal/service` 的 `Install`。不需要登录
 （与 CLI `service install` 一致）。
@@ -809,7 +861,7 @@ systemd 逻辑（用户级 `systemctl --user`）；unit 未安装（或当前平
 }
 ```
 
-### 4.21 `service.uninstall`
+### 4.22 `service.uninstall`
 
 停止并删除用户级 systemd unit。不需要参数，也不需要登录。
 
@@ -894,6 +946,14 @@ printf '%s\n' \
   | /tmp/chat-deepseek ipc --data-dir ./data 2>/tmp/ipc.log
 ```
 
+首次初始化（数据目录里还没有活动 Owner 时；成功后自动登录）。
+
+```sh
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"auth.setup","params":{"username":"owner","password":"<password>"}}' \
+  | /tmp/chat-deepseek ipc --data-dir ./data 2>/tmp/ipc.log
+```
+
 登录（`<password>` 换成真实密码，注意别写进 shell 历史）：
 
 ```sh
@@ -903,7 +963,8 @@ printf '%s\n' \
 ```
 
 登录态只属于当前 ipc 进程：上面的命令结束后进程退出，下一次 `ipc` 调 `auth.whoami` 会返回
-`{"authenticated":false}`，这是预期行为。要在同一个进程里连续操作，请保持 stdin 打开，
+`{"authenticated":false,"initialized":true}`（数据目录已有 Owner，只是新进程没登录），这是预期行为。
+要在同一个进程里连续操作，请保持 stdin 打开，
 **先读到 `auth.login` 的响应，再发下一个请求**；一次性把多行灌进管道时请求是并发执行的。
 
 账户写方法要先在同一进程内登录，然后逐条发送（下面是请求行示例，不是 shell 命令）：
@@ -962,7 +1023,8 @@ printf '%s\n' \
 
 - **ipc = 本地控制面 + GUI；HTTP = 浏览器数据面；两者不混用。** GUI 不拼 CLI、不解析中文，也不通过 HTTP 调管理操作。
 - `ipc` 会写备份目录、恢复数据目录、写 `config.json`、安装/卸载 systemd unit，并可创建/改密/删除账户；
-  密码只出现在 `auth.login`/`account.*` 的请求参数里，不落盘、不写日志。它**不写聊天数据、不传 API Key**，不是第二个业务 API。
+  密码只出现在 `auth.login`/`auth.setup`/`account.*` 的请求参数里，不落盘、不写日志。
+  它**不写聊天数据、不传 API Key**，不是第二个业务 API。
 - `account.*` 的权限与 CLI `user ...` 一致（Admin 起步，改组与高权限账户操作需要 Owner）。
   `config.set`、`service.install/uninstall` 与 CLI 对应命令一样**不要求登录**。
 - 浏览器仍只走 `/api/v1`；`ipc` 不引入新的前端可用接口。
@@ -990,6 +1052,8 @@ printf '%s\n' \
   新进程也不会找到旧进程的文件，同一台机器上的多个 ipc 实例各自独立登录。
   进程启动时间读不到时会使用进程内固定的随机标识，而不是退化成 `PID-0.json`。
 - 只有 Admin/Owner 能调用 `auth.login`；普通 User 不能登录本地管理面，和 CLI 一致。
+- `auth.setup` 只在没有活动 Owner 时可用，成功后自动登录；它不能用来给已初始化的数据目录
+  添加账户或重置密码，那些操作仍走 `auth.login` + `account.*`。
 - `account.delete` 没有二次确认参数，调用方必须先让用户确认；删除账户不会清理其附件文件。
 - 基础 `User` 组始终存在，所以组数组通常是 `["User","Admin"]` / `["User","Owner"]`；
   客户端按最高权限组展示角色，不要依赖数组顺序，也不要假设数组里只有管理组。

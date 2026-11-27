@@ -38,6 +38,7 @@ func methodTable() []methodSpec {
 		{name: "service.logs", handle: (*Server).serviceLogs},
 		{name: "auth.whoami", handle: noParams((*Server).authWhoami)},
 		{name: "auth.login", handle: (*Server).authLogin},
+		{name: "auth.setup", handle: (*Server).authSetup},
 		{name: "auth.logout", handle: (*Server).authLogout},
 		{name: "account.list", handle: (*Server).accountList},
 		{name: "account.add", handle: (*Server).accountAdd},

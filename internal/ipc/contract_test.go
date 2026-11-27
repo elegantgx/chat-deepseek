@@ -33,12 +33,12 @@ func TestMethodJSONFieldNames(t *testing.T) {
 		t.Fatalf("auth.login: %+v", rpcErr)
 	}
 	identity := jsonFields(t, value)
-	for _, key := range []string{"authenticated", "username", "groups", "expiresAt"} {
+	for _, key := range []string{"authenticated", "initialized", "username", "groups", "expiresAt"} {
 		if _, ok := identity[key]; !ok {
 			t.Fatalf("auth.login 缺少字段 %q: %v", key, identity)
 		}
 	}
-	if len(identity) != 4 {
+	if len(identity) != 5 {
 		t.Fatalf("auth.login 字段数 = %d: %v", len(identity), identity)
 	}
 
@@ -46,7 +46,7 @@ func TestMethodJSONFieldNames(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("auth.whoami: %+v", rpcErr)
 	}
-	if who := jsonFields(t, value); len(who) != 4 {
+	if who := jsonFields(t, value); len(who) != 5 {
 		t.Fatalf("auth.whoami 字段 = %v", who)
 	}
 

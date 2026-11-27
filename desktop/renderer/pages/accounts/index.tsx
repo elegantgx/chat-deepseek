@@ -17,7 +17,13 @@ import {
   Toast,
 } from '../../ui'
 import type { TableColumn, ToastTone } from '../../ui'
-import { AddAccountDialog, ChangePasswordDialog, DeleteAccountDialog } from './AccountDialogs'
+import {
+  AddAccountDialog,
+  ChangePasswordDialog,
+  DeleteAccountDialog,
+  USERNAME_PATTERN,
+  passwordBytes,
+} from './AccountDialogs'
 import type { AddAccountValues } from './AccountDialogs'
 import styles from './page.module.css'
 
@@ -230,6 +236,133 @@ function LoginCard({ busy, onLogin }: LoginCardProps) {
           </p>
           <Button tone="primary" type="submit" className={styles.loginSubmit} disabled={busy}>
             {busy ? '登录中…' : '登录'}
+          </Button>
+        </form>
+      </Card>
+    </div>
+  )
+}
+
+interface SetupCardProps {
+  busy: boolean
+  onSetup: (username: string, password: string) => Promise<string | null>
+}
+
+interface SetupErrors {
+  username?: string
+  password?: string
+  confirm?: string
+}
+
+/**
+ * 首次使用：数据目录里还没有活动 Owner 时显示。没有账户可登录，
+ * 所以这里不能只放登录表单；创建成功会直接建立 ipc 登录态。
+ */
+function SetupCard({ busy, onSetup }: SetupCardProps) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [errors, setErrors] = useState<SetupErrors>({})
+  const [failure, setFailure] = useState('')
+
+  const clear = (field: keyof SetupErrors) => {
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }))
+    }
+    if (failure) {
+      setFailure('')
+    }
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (busy) {
+      return
+    }
+    const name = username.trim()
+    const next: SetupErrors = {}
+    if (!name) {
+      next.username = '请输入用户名'
+    } else if (!USERNAME_PATTERN.test(name)) {
+      next.username = '用户名只能包含字母、数字或 . _ -（1–64 位）'
+    }
+    if (!password) {
+      next.password = '请输入密码'
+    } else if (passwordBytes(password) < 8) {
+      next.password = '密码至少 8 字节'
+    } else if (passwordBytes(password) > 1024) {
+      next.password = '密码不能超过 1024 字节'
+    }
+    if (!confirm) {
+      next.confirm = '请再次输入密码'
+    } else if (confirm !== password) {
+      next.confirm = '两次输入的密码不一致'
+    }
+    setErrors(next)
+    if (next.username || next.password || next.confirm) {
+      return
+    }
+    setFailure('')
+    const message = await onSetup(name, password)
+    if (message) {
+      setFailure(message)
+    }
+  }
+
+  return (
+    <div className={styles.loginArea}>
+      <Card className={styles.setupCard}>
+        <div className={styles.loginHeading}>
+          <h2 className={styles.loginTitle}>创建第一个用户</h2>
+          <p className={styles.loginDescription}>
+            还没有任何账户。先创建一个所有者账户，用于登录 Web 端和桌面端。
+          </p>
+        </div>
+        <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
+          <Field
+            label="用户名"
+            value={username}
+            onChange={(value) => {
+              setUsername(value)
+              clear('username')
+            }}
+            autoComplete="username"
+            fullWidth
+            disabled={busy}
+            error={errors.username}
+          />
+          <Field
+            label="密码"
+            type="password"
+            value={password}
+            onChange={(value) => {
+              setPassword(value)
+              clear('password')
+            }}
+            autoComplete="new-password"
+            fullWidth
+            disabled={busy}
+            error={errors.password}
+            hint={errors.password ? undefined : '至少 8 字节'}
+          />
+          <Field
+            label="确认密码"
+            type="password"
+            value={confirm}
+            onChange={(value) => {
+              setConfirm(value)
+              clear('confirm')
+            }}
+            autoComplete="new-password"
+            fullWidth
+            disabled={busy}
+            error={errors.confirm}
+          />
+          <p className={styles.loginError} role={failure ? 'alert' : undefined}>
+            {failure}
+          </p>
+          <Button tone="primary" type="submit" className={styles.loginSubmit} disabled={busy}>
+            {busy ? '创建中…' : '创建并登录'}
           </Button>
         </form>
       </Card>
@@ -578,6 +711,32 @@ export function AccountsPage() {
     return null
   }
 
+  const handleSetup = async (username: string, password: string): Promise<string | null> => {
+    if (!beginSession()) {
+      return '操作进行中，请稍候'
+    }
+    try {
+      await host.request('auth.setup', { username, password })
+    } catch (failure) {
+      endSession()
+      const error = normalizeHostError(failure)
+      if (error.code === 'bad_request') {
+        return error.message
+      }
+      // conflict：数据目录已被别处初始化，或用户名已被占用；internal：用户可能已创建
+      // 但会话没写成。两种情况都以 whoami 为准确认状态，避免停在已经没有意义的创建表单上。
+      reloadWhoami()
+      if (error.code === 'conflict') {
+        return error.message
+      }
+      showToast('error', `${error.code}: ${error.message}`)
+      return '创建失败，请稍后重试'
+    }
+    showToast('success', `已创建第一个用户 ${username.trim()}`)
+    reloadWhoami()
+    return null
+  }
+
   const handleLogout = async () => {
     if (!beginSession()) {
       return
@@ -639,6 +798,18 @@ export function AccountsPage() {
           onSessionLost={handleSessionLost}
           showToast={showToast}
         />
+        {toastNode}
+      </>
+    )
+  }
+
+  if (!whoami.data.initialized) {
+    return (
+      <>
+        <PageHead title="账户" />
+        <PageBody>
+          <SetupCard busy={sessionBusy} onSetup={handleSetup} />
+        </PageBody>
         {toastNode}
       </>
     )

@@ -16,13 +16,16 @@ import (
 	"github.com/elegantgx/chat-deepseek/internal/database"
 )
 
-// authIdentity 是 auth.whoami / auth.login 的返回形状。
-// 未登录时只输出 authenticated:false，不能带出任何账户信息。
+// authIdentity 是 auth.whoami / auth.login / auth.setup 的返回形状。
+// 未登录时只输出 authenticated:false 和 initialized，不能带出任何账户信息。
 type authIdentity struct {
-	Authenticated bool     `json:"authenticated"`
-	Username      string   `json:"username,omitempty"`
-	Groups        []string `json:"groups,omitempty"`
-	ExpiresAt     string   `json:"expiresAt,omitempty"`
+	Authenticated bool `json:"authenticated"`
+	// Initialized 表示数据目录里已有活动 Owner：false 时客户端应引导创建第一个用户，
+	// 而不是只显示登录表单（没有账户可登录）。
+	Initialized bool     `json:"initialized"`
+	Username    string   `json:"username,omitempty"`
+	Groups      []string `json:"groups,omitempty"`
+	ExpiresAt   string   `json:"expiresAt,omitempty"`
 }
 
 type authLogoutResult struct {
@@ -30,6 +33,12 @@ type authLogoutResult struct {
 }
 
 type authLoginParams struct {
+	Username *string `json:"username"`
+	Password *string `json:"password"`
+}
+
+// authSetupParams 与 auth.login 相同；单独命名是为了让「创建首个 Owner」的参数演化不牵连登录。
+type authSetupParams struct {
 	Username *string `json:"username"`
 	Password *string `json:"password"`
 }
@@ -69,9 +78,11 @@ func openExistingDatabase(dir string) (*sql.DB, error) {
 func identityFor(user *account.User, expiresAt int64) authIdentity {
 	return authIdentity{
 		Authenticated: true,
-		Username:      user.Username,
-		Groups:        groupNames(user.Groups),
-		ExpiresAt:     formatRFC3339Millis(expiresAt),
+		// 能认证成功就说明至少有一个活动 Owner（只有 Admin/Owner 能登录）。
+		Initialized: true,
+		Username:    user.Username,
+		Groups:      groupNames(user.Groups),
+		ExpiresAt:   formatRFC3339Millis(expiresAt),
 	}
 }
 
@@ -224,12 +235,93 @@ func (s *Server) authWhoami() (any, *rpcError) {
 	state, rpcErr := s.authenticate(account.Group(""))
 	if rpcErr != nil {
 		if rpcErr.Code == codeUnauthenticated {
-			return authIdentity{Authenticated: false}, nil
+			return authIdentity{Initialized: s.hasActiveOwner()}, nil
 		}
 		return nil, rpcErr
 	}
 	defer state.close()
 	return identityFor(state.user, state.expiresAt), nil
+}
+
+// hasActiveOwner 只回答「数据目录里有没有活动 Owner」，用于区分首次使用和只是没登录。
+// 数据库不存在、损坏或读取失败都按 false 处理：客户端应显示创建入口，
+// 真正的错误（权限、磁盘）留到 auth.setup 再报，不让登录页变成无法操作的死路。
+func (s *Server) hasActiveOwner() bool {
+	initialized, err := database.Initialized(s.dataDir)
+	if err != nil {
+		s.logf("检查数据目录初始化状态失败: %v", err)
+		return false
+	}
+	return initialized
+}
+
+// authSetup 创建数据目录的第一个 Owner，并直接建立当前 ipc 进程的登录态。
+// 只允许在没有活动 Owner 时调用：已有用户的数据目录必须走 auth.login，
+// 否则任何能驱动 ipc 的本地进程都能凭这个接口拿到最高权限。
+func (s *Server) authSetup(params json.RawMessage) (any, *rpcError) {
+	payload := authSetupParams{}
+	if rpcErr := decodeParams(params, &payload); rpcErr != nil {
+		return nil, rpcErr
+	}
+	if payload.Username == nil || strings.TrimSpace(*payload.Username) == "" {
+		return nil, badRequestError("缺少参数 username")
+	}
+	if payload.Password == nil || *payload.Password == "" {
+		return nil, badRequestError("缺少参数 password")
+	}
+	username := strings.TrimSpace(*payload.Username)
+	if err := account.ValidateUsername(username); err != nil {
+		return nil, badRequestError("用户名需为 1-64 个字母、数字或 . _ -")
+	}
+	if rpcErr := validateNewPassword(*payload.Password); rpcErr != nil {
+		return nil, rpcErr
+	}
+
+	s.authOp.Lock()
+	defer s.authOp.Unlock()
+
+	// 与 CLI setup 一致：数据库由这里初始化，随后写入第一个 Owner。
+	db, err := database.Open(s.dataDir)
+	if err != nil {
+		return nil, internalError("打开数据库失败", err)
+	}
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+	accounts := account.NewStore(db)
+	count, err := accounts.CountActiveOwners(ctx)
+	if err != nil {
+		return nil, internalError("读取账户状态失败", err)
+	}
+	if count > 0 {
+		return nil, conflictError("这个数据目录已经有用户了；请直接登录")
+	}
+	hash, err := auth.HashPassword(*payload.Password)
+	if err != nil {
+		if errors.Is(err, auth.ErrInvalidPassword) {
+			return nil, badRequestError("密码至少 8 位")
+		}
+		return nil, internalError("生成密码哈希失败", err)
+	}
+	user, err := accounts.Create(
+		ctx,
+		username,
+		hash,
+		[]account.Group{account.GroupUser, account.GroupOwner},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, account.ErrUsernameTaken):
+			return nil, conflictError("用户名已存在：" + clip(username, 80))
+		case errors.Is(err, account.ErrInvalidUser):
+			return nil, badRequestError("用户名需为 1-64 个字母、数字或 . _ -")
+		}
+		return nil, internalError("创建首个 Owner 失败", err)
+	}
+	expiresAt, rpcErr := s.startSession(db, user, s.now())
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return identityFor(user, expiresAt), nil
 }
 
 func (s *Server) authLogin(params json.RawMessage) (any, *rpcError) {
@@ -286,12 +378,23 @@ func (s *Server) authLogin(params json.RawMessage) (any, *rpcError) {
 	}
 
 	now := s.now()
+	expiresAt, rpcErr := s.startSession(db, user, now)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	return identityFor(user, expiresAt), nil
+}
+
+// startSession 为当前 ipc 进程建立 CLI 会话：写数据库会话行和本地会话文件。
+// 调用方必须持有 s.authOp；登录与首次创建 Owner 共用这段逻辑。
+func (s *Server) startSession(db *sql.DB, user *account.User, now time.Time) (int64, *rpcError) {
+	ctx := context.Background()
 	sessions := auth.NewSessionStore(db)
 	// 顺手清掉过期会话行；登录是低频操作，不会造成明显抖动。
 	_, _ = sessions.DeleteExpired(ctx, now)
 	token, tokenHash, _, err := auth.NewSessionSecrets()
 	if err != nil {
-		return nil, internalError("生成登录令牌失败", err)
+		return 0, internalError("生成登录令牌失败", err)
 	}
 	session, err := sessions.Create(ctx, auth.SessionParams{
 		UserID:    user.ID,
@@ -301,7 +404,7 @@ func (s *Server) authLogin(params json.RawMessage) (any, *rpcError) {
 		TTL:       s.sessionTTL,
 	}, now)
 	if err != nil {
-		return nil, internalError("创建登录会话失败", err)
+		return 0, internalError("创建登录会话失败", err)
 	}
 	// 同一个 ipc 进程重新 login 时清掉旧会话，避免数据库里留下孤儿行。
 	if previous, err := s.readOwnSession(); err == nil {
@@ -321,10 +424,10 @@ func (s *Server) authLogin(params json.RawMessage) (any, *rpcError) {
 		ExpiresAt: session.ExpiresAt,
 	}); err != nil {
 		_ = sessions.Delete(ctx, session.ID)
-		return nil, internalError("保存登录态失败", err)
+		return 0, internalError("保存登录态失败", err)
 	}
 	s.cleanupExpiredSessionFiles(now)
-	return identityFor(user, session.ExpiresAt), nil
+	return session.ExpiresAt, nil
 }
 
 // cleanupOwnSessionOnExit 在 Serve 退出时 best-effort 吊销本进程的会话：

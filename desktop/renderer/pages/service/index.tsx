@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   PageBody,
   PageHead,
+  navigate,
   normalizeHostError,
   useHost,
   useHostEvent,
@@ -9,6 +10,7 @@ import {
 } from '../../app'
 import type { HostError } from '../../app'
 import type {
+  AuthState,
   ServiceLogEvent,
   ServiceLogsResult,
   ServiceStartResult,
@@ -22,6 +24,7 @@ import {
   CardHeader,
   EmptyState,
   LogPane,
+  PlusIcon,
   PowerIcon,
   RefreshIcon,
   Toast,
@@ -79,6 +82,10 @@ interface ToastState {
 export function ServicePage() {
   const host = useHost()
   const status = useRequest<SystemStatus>('system.status')
+  // 首次使用（数据目录里没有活动 Owner）时 serve 必然起不来：
+  // 页面先给创建入口，不让用户点一次启动再看日志里的 CLI 报错。
+  const auth = useRequest<AuthState>('auth.whoami')
+  const needsSetup = auth.data?.initialized === false
   // 「查看全部日志」把 tail 提到后端上限，复用同一条读取路径，不新增方法。
   const [fullLogs, setFullLogs] = useState(false)
   const logs = useRequest<ServiceLogsResult>('service.logs', {
@@ -114,6 +121,9 @@ export function ServicePage() {
   const baseState = service?.state
   const running = baseState === 'running'
   const stopped = baseState === 'stopped'
+  // 没有活动 Owner 且服务没在运行时，启动必然失败：主操作换成「新建用户」。
+  // 服务仍在跑（例如由 systemd 独立管理）时保留重启/停止，不抢走操作。
+  const setupRequired = needsSetup && !running
   // 主操作只看 TCP 探测结果：没装 systemd 时后端会自动起本地子进程，安装不再是前置条件。
   const mode = service?.mode
   // 「管理方式」说清当前是谁在托管；none 只有 stopped 才等于「未运行」，
@@ -376,9 +386,20 @@ export function ServicePage() {
   // 点「查看全部」只会再取一次空数组，收口链接没有意义。
   const noLogSource = logs.data !== null && logs.data.lines.length === 0
 
-  // 主操作只看 TCP 探测：running 给重启/停止，stopped 给启动；
+  // 首次使用没有 Owner 时启动必然失败，主操作换成「新建用户」；
+  // 其余情况只看 TCP 探测：running 给重启/停止，stopped 给启动。
   // 没有 systemd（supported=false）也不禁用，后端会自动走本地进程模式。
-  const headActions = running ? (
+  const headActions = setupRequired ? (
+    <Button
+      tone="primary"
+      icon={<PlusIcon size={15} />}
+      onClick={() => {
+        navigate('accounts')
+      }}
+    >
+      新建用户
+    </Button>
+  ) : running ? (
     <>
       <Button
         tone="secondary"
@@ -418,6 +439,14 @@ export function ServicePage() {
     <>
       <PageHead title="服务" actions={headActions} />
       <PageBody>
+        {setupRequired ? (
+          <div className={styles.banner}>
+            <AlertTriangleIcon size={16} />
+            <span className={styles.bannerText}>
+              还没有创建用户，服务需要至少一个所有者账户才能启动。
+            </span>
+          </div>
+        ) : null}
         <Card className={styles.statusCard}>
           <h2 className="cd-sr-only">服务状态</h2>
           {readError ? (

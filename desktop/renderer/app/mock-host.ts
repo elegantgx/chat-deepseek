@@ -229,13 +229,14 @@ interface MockState {
 
 /**
  * hash 里的后缀只影响替身：`-off` 初始停止、`empty` 清空备份、`login` 未登录、
- * `statuserr` 状态读失败、`-systemd` 初始装了 unit、`-linger` linger 已开启、
- * `-uninstalled` 是默认本地态的显式别名。
+ * `setup` 首次使用（没有账户，应显示创建第一个用户）、`statuserr` 状态读失败、
+ * `-systemd` 初始装了 unit、`-linger` linger 已开启、`-uninstalled` 是默认本地态的显式别名。
  */
 function hashFlags(): {
   running: boolean
   emptyBackups: boolean
   signedOut: boolean
+  firstRun: boolean
   statusError: boolean
   systemd: boolean
   linger: boolean
@@ -246,6 +247,7 @@ function hashFlags(): {
     running: !/(^|-)off($|-)/.test(raw),
     emptyBackups: /(^|-)empty($|-)/.test(raw),
     signedOut: /(^|-)login($|-)/.test(raw),
+    firstRun: /(^|-)setup($|-)/.test(raw),
     statusError: /(^|-)statuserr($|-)/.test(raw),
     systemd: /(^|-)systemd($|-)/.test(raw),
     linger: /(^|-)linger($|-)/.test(raw),
@@ -255,14 +257,16 @@ function hashFlags(): {
 export function createMockHost(): HostClient {
   const now = new Date()
   const flags = hashFlags()
+  // 首次使用时数据目录还没初始化，服务不可能在跑；否则 #setup 会同时显示「运行中」和「先创建用户」。
+  const running = flags.running && !flags.firstRun
   const state: MockState = {
-    running: flags.running,
+    running,
     starting: false,
     pid: 4821,
     startTimer: null,
     installed: flags.systemd,
     // 没装 unit 时运行中是 ipc 托管的本地进程；装了 unit 则归 systemd。
-    mode: flags.systemd ? 'systemd' : flags.running ? 'process' : 'none',
+    mode: flags.systemd ? 'systemd' : running ? 'process' : 'none',
     linger: flags.linger,
     unitPath: '~/.config/systemd/user/chat-deepseek.service',
     lastOpenUrl: null,
@@ -274,16 +278,19 @@ export function createMockHost(): HostClient {
       backupDir: '/home/<user>/chat-deepseek/data/backups',
       version: '0.1.5-official0.1.4',
     },
-    backups: flags.emptyBackups ? [] : seedBackups(now),
-    accounts: seedAccounts(),
-    auth: {
-      authenticated: !flags.signedOut,
-      username: 'gx',
-      groups: ['Admin', 'User'],
-      expiresAt: rfc3339(new Date(now.getTime() + 12 * 60 * 60 * 1000)),
-    },
+    backups: flags.emptyBackups || flags.firstRun ? [] : seedBackups(now),
+    accounts: flags.firstRun ? [] : seedAccounts(),
+    auth: flags.firstRun
+      ? { authenticated: false, initialized: false }
+      : {
+          authenticated: !flags.signedOut,
+          initialized: true,
+          username: 'gx',
+          groups: ['Admin', 'User'],
+          expiresAt: rfc3339(new Date(now.getTime() + 12 * 60 * 60 * 1000)),
+        },
     // 只有确实在运行才播种日志；`#off` 与从未启动的本地态是空数组。
-    logs: flags.running ? seedLogs(now) : [],
+    logs: running ? seedLogs(now) : [],
   }
 
   const listeners = new Set<(method: string, params: unknown) => void>()
@@ -631,6 +638,7 @@ export function createMockHost(): HostClient {
       const account = state.accounts.find((row) => row.username === username)
       state.auth = {
         authenticated: true,
+        initialized: true,
         username,
         groups: account?.groups ?? ['User'],
         expiresAt: rfc3339(new Date(Date.now() + 12 * 60 * 60 * 1000)),
@@ -638,8 +646,42 @@ export function createMockHost(): HostClient {
       state.accounts = state.accounts.map((row) => ({ ...row, self: row.username === username }))
       return { ...state.auth }
     },
+    'auth.setup': (params) => {
+      const payload = requireObject(params)
+      const username = requireString(payload.username, 'username').trim()
+      const password = requireString(payload.password, 'password')
+      if (state.auth.initialized) {
+        fail('conflict', '这个数据目录已经有用户了；请直接登录')
+      }
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(username)) {
+        fail('bad_request', '用户名需为 1-64 个字母、数字或 . _ -')
+      }
+      if (passwordBytes(password) < 8) {
+        fail('bad_request', '密码至少 8 位')
+      }
+      if (state.accounts.some((row) => row.username === username)) {
+        fail('conflict', `用户名已存在：${username}`)
+      }
+      const groups: AccountGroup[] = ['User', 'Owner']
+      state.accounts.push({
+        id: `acc_${username}`,
+        username,
+        groups,
+        disabled: false,
+        createdAt: rfc3339(new Date()),
+        self: true,
+      })
+      state.auth = {
+        authenticated: true,
+        initialized: true,
+        username,
+        groups,
+        expiresAt: rfc3339(new Date(Date.now() + 12 * 60 * 60 * 1000)),
+      }
+      return { ...state.auth }
+    },
     'auth.logout': () => {
-      state.auth = { authenticated: false }
+      state.auth = { authenticated: false, initialized: state.auth.initialized }
       return { ok: true }
     },
     'account.list': () => {

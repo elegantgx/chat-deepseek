@@ -49,7 +49,7 @@
 - 读失败要显示错误说明 + 重试，不能把空数据显示成空态；真正的空列表才用 `ui/EmptyState`。
 - 写操作失败统一走 `normalizeHostError`，用 Toast 显示 `message`（`code` 只做分支判断）。
 - 写成功后 `reload()` 相关读请求；真后端里写方法是串行的，且并发顺序不保证，所以一次只允许一个在途操作。
-- 页面不读 `window.location.hash`。替身支持的 `-off` / `empty` / `login` / `statuserr` /
+- 页面不读 `window.location.hash`。替身支持的 `-off` / `empty` / `login` / `setup` / `statuserr` /
   `-systemd` / `-linger` 后缀在 `app/mock-host.ts` 里处理；`-uninstalled` 只是默认本地态的显式别名。
   页面只管渲染后端给的数据。
 

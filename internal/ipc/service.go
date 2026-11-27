@@ -492,7 +492,7 @@ func (s *Server) serviceInstall(params json.RawMessage) (any, *rpcError) {
 	}
 	if !initialized {
 		return nil, unavailableError(fmt.Sprintf(
-			"数据目录尚未初始化：%s；先运行 chat-deepseek setup",
+			"数据目录尚未初始化：%s；请先在桌面端「账户」页创建第一个用户，或运行 chat-deepseek setup",
 			s.dataDir,
 		))
 	}

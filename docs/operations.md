@@ -60,6 +60,9 @@ pnpm dev
 
 - 开发态：`pnpm desktop:build` 后运行 `XDG_CONFIG_HOME=$PWD/tmp/xdg ./node_modules/.bin/electron desktop/dist/main.js --smoke`，确认渲染层加载、`system.status`、`desktop.openUrl` 拒绝分支并退出 0。
 - 打包态：先 `pnpm desktop:backend`，再 `pnpm desktop:pack:linux`；解压 `release/desktop/*.tar.gz` 后用同一个 `--smoke` 跑一次。日志里的 `[smoke] backend binary -> .../resources/bin/chat-deepseek (exists=true)` 说明 `extraResources` 与主进程路径解析都正确。
+- 空数据目录首次打开：服务页主操作变为「新建用户」并出现警告条，点击进入账户页；账户页显示
+  「创建第一个用户」，提交后自动登录并进入账户列表，随后服务能正常启动。已有 Owner 但未登录时
+  仍是登录表单和「启动服务」。
 - `--smoke` 窗口始终隐藏；本机验收不要裸跑可见窗口。
 
 ## 4. 发布流水线

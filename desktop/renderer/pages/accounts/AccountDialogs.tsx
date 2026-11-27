@@ -13,10 +13,10 @@ export interface AddAccountValues {
   role: AddAccountRole
 }
 
-const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
+export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{1,64}$/
 
 /** 契约按 UTF-8 字节数限制 8-1024；中文密码不能用 string.length 判断 */
-function passwordBytes(value: string): number {
+export function passwordBytes(value: string): number {
   return new TextEncoder().encode(value).length
 }
 
