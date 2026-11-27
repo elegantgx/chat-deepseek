@@ -6,11 +6,11 @@
 
 ## 下载与安装
 
-发布页同时提供 Electron 桌面端（便携 zip，解压即用）和 Linux 服务端（headless，用浏览器访问）。macOS/Windows 只发桌面端包，包里带着同一份 CLI；Linux 如果只想下二进制跑服务端，用 `-server` 包。文件名里的 `<版本>` 是带 `v` 的版本号，例如 `v0.1.5-official0.1.4`。
+发布页同时提供 Linux 服务端（headless，用浏览器访问）和 Electron 桌面端（便携 zip，解压即用）；macOS/Windows 只发桌面端。
 
 ### Linux
 
-- **服务端**（headless）：下载 `chat-deepseek-<版本>-linux-server-amd64.zip`，解压后运行 `./chat-deepseek`。首次启动会引导创建 Owner，之后在浏览器打开 `http://127.0.0.1:8090`。
+- **服务端**：下载 `chat-deepseek-<版本>-linux-server-amd64.zip`，解压后运行 `./chat-deepseek`。首次启动会引导创建 Owner，之后在浏览器打开 `http://127.0.0.1:8090`。
 - **桌面端**：下载 `chat-deepseek-<版本>-linux-amd64.zip`，解压后运行 `chat-deepseek`，不需要安装。桌面端自带 Go 后端（`resources/bin/chat-deepseek`），数据默认在 `~/.config/chat-deepseek/data`。
 - systemd 是**可选的高级功能**：不安装也能用前台进程、tmux、nohup 或其它 supervisor；需要开机自启时再执行 `./chat-deepseek service install --enable`，详见[常驻运行](#常驻运行)。
 
@@ -20,9 +20,9 @@
 
 ### Windows
 
-- **桌面端**：`chat-deepseek-<版本>-windows-amd64.zip`，解压后运行 `chat-deepseek.exe`，不需要安装。包内自带 Go 后端（`resources\bin\chat-deepseek.exe`）；未签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
+- **桌面端**：`chat-deepseek-<版本>-windows-amd64.zip`，解压后运行 `chat-deepseek.exe`，不需要安装。未签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
 
-桌面端和浏览器访问的是同一套本机服务：桌面端在后台启动 `chat-deepseek ipc` 并只监听回环，聊天界面在桌面窗口里；Linux 服务端压缩包则适合服务器、NAS 或只用浏览器的场景。
+桌面端和浏览器访问的是同一套本机服务：桌面端在后台启动 `chat-deepseek ipc` 并只监听回环，聊天界面在桌面窗口里；服务端压缩包则适合服务器、NAS 或只用浏览器的场景。
 
 首次打开桌面端时，数据目录里还没有账户：服务页的「启动服务」会变成「新建用户」，点进去创建第一个用户即可，创建后会自动登录。
 
@@ -85,20 +85,20 @@ CGO_ENABLED=0 go build -o chat-deepseek ./cmd/chat-deepseek
 
 `.github/workflows/release-{linux,macos,windows}.yml` 是三个手动触发的 GitHub Actions 工作流：在 Actions 里选择 Release Linux、Release macOS 或 Release Windows，点击 Run workflow；push、标签、Pull Request 和定时任务都不会自动触发。在 tag 上运行会把产物发到同一个 GitHub Release，在分支上运行只保留 Actions artifacts（30 天）。
 
-每个工作流都跑同样的门禁：`pnpm install --frozen-lockfile` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）；然后用 `CGO_ENABLED=0` 构建 Go 二进制（桌面端 `resources/bin` 与 Linux 服务端包复用），`pnpm desktop:build` 编译主进程与渲染层，最后由 electron-builder 出便携 zip。
+每个工作流都跑同样的门禁：`pnpm install --frozen-lockfile` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）；然后用 `CGO_ENABLED=0` 构建同一份 Go 二进制（Linux 服务端包与桌面端 `resources/bin` 复用），`pnpm desktop:build` 编译主进程与渲染层，最后由 electron-builder 出便携 zip。
 
 产物矩阵：
 
-| 平台    | 产物                                                                                               |
-| ------- | -------------------------------------------------------------------------------------------------- |
-| Linux   | 桌面端 `chat-deepseek-<版本>-linux-amd64.zip`；服务端 `chat-deepseek-<版本>-linux-server-amd64.zip` |
-| macOS   | 桌面端 `chat-deepseek-<版本>-macos-arm64.zip`                                                       |
-| Windows | 桌面端 `chat-deepseek-<版本>-windows-amd64.zip`                                                     |
+| 平台    | 服务端（headless）                            | 桌面端（便携 zip）                              |
+| ------- | --------------------------------------------- | ----------------------------------------------- |
+| Linux   | `chat-deepseek-<版本>-linux-server-amd64.zip` | `chat-deepseek-<版本>-linux-amd64.zip`          |
+| macOS   | —                                             | `chat-deepseek-<版本>-macos-arm64.zip`          |
+| Windows | —                                             | `chat-deepseek-<版本>-windows-amd64.zip`        |
 
-- 所有 zip 的名字统一是 `v<package.json 版本>`，与发布 tag 一致（例如 `v0.1.5-official0.1.4`）。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本：tag 运行时是 tag 名，分支运行是提交 SHA。
+- 版本取自 tag 名（带 `v`），例如 `v0.1.5-official0.1.4`。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本。
 - 三平台都只出便携 zip（不出 NSIS/dmg/AppImage/deb/tar.gz），解压即用；命名带平台与架构，配置见 `electron-builder.yml`。
-- Linux 服务端 ZIP 只含二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不带 GUI 或整份 `src/`。
-- 桌面端把 Go 二进制（也是 CLI）放在 `resources/bin/`，macOS 上是 `chat-deepseek.app/Contents/Resources/bin/`；主进程在打包态从 `process.resourcesPath` 解析，开发态仍先看 `CHAT_DEEPSEEK_BIN`，否则用仓库根目录的 `chat-deepseek`。
+- Linux 服务端 ZIP 只含二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不再附带 GUI 源码或整份 `src/`。
+- 桌面端把 Go 二进制放在 `resources/bin/`；主进程在打包态从 `process.resourcesPath` 解析，开发态仍先看 `CHAT_DEEPSEEK_BIN`，否则用仓库根目录的 `chat-deepseek`。
 - 三份 workflow 可以并行；发布步骤对同一 tag 的 Release 创建和上传做 6 次重试，避免同时创建时的竞态。
 - macOS 包未签名，首次打开按住 Control 点按应用 →「打开」，或执行 `xattr -cr`；Windows 包未签名，可能出现 SmartScreen 提示。
 
