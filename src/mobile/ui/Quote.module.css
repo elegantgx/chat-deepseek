@@ -1,0 +1,8 @@
+.quote {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--brand-line);
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 22px;
+}

@@ -1,0 +1,71 @@
+import type { ScreenStrings } from '../strings.js'
+
+/**
+ * 聊天两屏自己的文案。
+ *
+ * 只放「别的屏不会用到、也还没进 zh.ts/en.ts」的话；复制、重新生成、会话分组这些
+ * 共用词仍走 `i18n/`，避免集成时同一句话出现两份。key 的顺序就是中文版顺序，
+ * 英文版按同一组 key 对齐（`ScreenStrings` 会用类型把缺项顶出来）。
+ */
+export const chatStrings = {
+  zh: {
+    greeting: '嗨！今天想聊些什么？',
+    inputPlaceholder: '发消息或按住说话',
+    deepThink: '深度思考',
+    smartSearch: '智能搜索',
+    disclaimer: '回答由 AI 生成，仅供参考',
+    openDrawer: '打开会话抽屉',
+    drawerLabel: '会话历史',
+    searchPlaceholder: '搜索对话内容...',
+    sortByTime: '切换排序方式',
+    noSessions: '还没有对话',
+    noSessionsDescription: '开始新对话后，这里会出现历史。',
+    noSearchResults: '没有找到对话',
+    noSearchResultsDescription: '换个关键词试试。',
+    sessionActions: '会话操作',
+    deleteSessionTitle: '删除这个对话？',
+    deleteSessionAction: '删除对话',
+    deleteSessionDescription: '删除后，该对话及其中上传的文件将不可恢复。',
+    accountActions: '账户',
+    mute: '静音',
+    unmute: '取消静音',
+    muted: '已静音，语音输入已暂停',
+    unmuted: '已取消静音',
+    sourceTitle: '引用来源',
+    voiceMuted: '已静音，先取消静音再使用语音输入',
+    voiceRecording: '正在录音，再点一次结束',
+    voiceTranscribing: '正在转写…',
+    openLinkFailed: '打不开这个链接',
+    welcomeAria: '新对话',
+  },
+  en: {
+    greeting: 'Hi! What would you like to chat about?',
+    inputPlaceholder: 'Message or hold to speak',
+    deepThink: 'DeepThink',
+    smartSearch: 'Search',
+    disclaimer: 'AI-generated content, for reference only',
+    openDrawer: 'Open conversation drawer',
+    drawerLabel: 'Conversation history',
+    searchPlaceholder: 'Search conversations...',
+    sortByTime: 'Change sort order',
+    noSessions: 'No conversations yet',
+    noSessionsDescription: 'Your history will appear here once you start a chat.',
+    noSearchResults: 'No conversations found',
+    noSearchResultsDescription: 'Try a different keyword.',
+    sessionActions: 'Conversation actions',
+    deleteSessionTitle: 'Delete this conversation?',
+    deleteSessionAction: 'Delete conversation',
+    deleteSessionDescription: 'The conversation and its uploaded files cannot be recovered.',
+    accountActions: 'Account',
+    mute: 'Mute',
+    unmute: 'Unmute',
+    muted: 'Muted. Voice input is paused.',
+    unmuted: 'Unmuted',
+    sourceTitle: 'Sources',
+    voiceMuted: 'Unmute first to use voice input',
+    voiceRecording: 'Recording. Tap again to finish.',
+    voiceTranscribing: 'Transcribing...',
+    openLinkFailed: 'Could not open this link',
+    welcomeAria: 'New conversation',
+  },
+} satisfies ScreenStrings

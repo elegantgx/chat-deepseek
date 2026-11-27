@@ -1,0 +1,20 @@
+/* 18 / 19：状态卡 + 切换入口 + 页脚说明（mockup .server-content）。 */
+
+/* 卡片下方的错误原因与页脚说明同一位置；错误原因换危险色 */
+.note {
+  margin: 24px 0 0 17px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dangerNote {
+  color: var(--danger);
+}
+
+/* 直接打开 18 但列表里没有远程时的兜底；不参与示意流程 */
+.missingText {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 21px;
+}

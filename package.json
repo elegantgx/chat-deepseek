@@ -9,8 +9,10 @@
   "scripts": {
     "dev": "rspack serve -c rspack.config.ts",
     "build": "node scripts/build-web.mjs",
+    "build:mobile": "node scripts/build-mobile-web.mjs",
+    "shots": "node scripts/shots.mjs",
     "type": "tsc -p tsconfig.json",
-    "lint": "oxlint src rspack.config.ts",
+    "lint": "oxlint src rspack.config.ts rspack.mobile.config.ts",
     "format": "oxfmt --write .",
     "desktop:build": "node scripts/build-desktop.mjs",
     "desktop:backend": "node scripts/build-desktop-backend.mjs",

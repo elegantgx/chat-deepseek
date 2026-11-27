@@ -1,0 +1,29 @@
+/* 设置页只有「字体大小」行的双 A 需要局部画法（mockup .s-aa）：小 A 13.5、大 A 17.5 同基线。 */
+.aa {
+  display: flex;
+  align-items: baseline;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.aa b {
+  font-weight: 500;
+}
+
+.aa b:first-child {
+  font-size: 13.5px;
+}
+
+.aa b:last-child {
+  font-size: 17.5px;
+}
+
+/* 开源许可弹层正文：14/21、--ink-2，左右 4 与 Sheet 的标题对齐 */
+.license {
+  margin: 0 4px 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 21px;
+}

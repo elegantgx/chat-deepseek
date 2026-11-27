@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 故意用平台主题：spike 不引 Material，一个无 ActionBar 的容器就够 WebView 铺满。 -->
+    <style name="Theme.ChatDeepSeek" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>

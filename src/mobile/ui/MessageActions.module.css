@@ -1,0 +1,39 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -8px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.action:active {
+  background: var(--fill);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.action svg {
+  display: block;
+}
+
+.danger {
+  color: var(--danger);
+}

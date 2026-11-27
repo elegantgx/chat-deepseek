@@ -1,0 +1,162 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+/* 面板宽 300、居中；上下留安全区，长选项列表在 max-height 内自己滚 */
+.modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 48px);
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--card);
+  color: var(--text);
+  transform: translate(-50%, -50%);
+}
+
+.title {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 22px 20px 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+}
+
+/* 没有正文时标题自己收底，动作区不会贴着文字 */
+.titleOnly {
+  padding-bottom: 20px;
+}
+
+.titleWithIcon {
+  padding-top: 8px;
+}
+
+.body {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 20px 20px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 21px;
+  text-align: center;
+}
+
+/* 动作区：52 高、两等分，中间 1px 分隔 */
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.action {
+  flex: 1;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.action + .action {
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.cancel {
+  color: var(--ink-2);
+}
+
+.confirm {
+  color: var(--brand);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.action:disabled {
+  color: var(--ink-4);
+  cursor: default;
+}
+
+/* 单选弹窗：可选 26 图标、无正文；列表容器带一条 16 上距的细线 */
+.icon {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding-top: 22px;
+  color: var(--text);
+}
+
+.list {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin-top: 16px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 56px;
+  padding: 0 22px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 22px;
+  text-align: left;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.confirm {
+  flex: 0 0 auto;
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  color: var(--brand);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.confirm:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}

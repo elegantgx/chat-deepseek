@@ -1,0 +1,19 @@
+/* 账户操作层：动作列表沿用 SheetAction；重置密码的表单在弹层里再排一列。 */
+.sheetForm {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 4px 0;
+}
+
+.sheetSubmit {
+  margin-top: 16px;
+}
+
+/* 当前账户不能删除时，用一行说明代替删除动作，位置与动作行同为 16 左缩进。 */
+.sheetNote {
+  margin: 0;
+  padding: 12px 4px 16px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}

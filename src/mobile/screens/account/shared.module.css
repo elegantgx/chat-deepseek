@@ -1,0 +1,90 @@
+/* 账户 8 屏共用的小排版；尺寸全部来自示意，颜色只走 token。 */
+
+/* 胶囊输入页的主操作：距上方说明/输入 20（mockup .pill-submit）。 */
+.submit {
+  margin-top: 20px;
+}
+
+/* 表单里带分组卡片时，创建按钮与卡片留 28（mockup form-content 规则）。 */
+.submitSpaced {
+  margin-top: 28px;
+}
+
+/* 表单级错误（不属于某个输入框时）：红字但不画红圈。 */
+.formError {
+  margin: 12px 0 0 4px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 卡片下方的一行说明（mockup .loop-note）：24 上距、左缩进 17。 */
+.note {
+  margin: 24px 0 0 17px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 账号管理的头像区（mockup .profile）：72 头像 + 14 间距 + 20/600 名字。 */
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0 0;
+}
+
+.avatarButton {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+}
+
+.avatarButton:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.avatarImage {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profileName {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 26px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+/* 读取数据时的占位，不改变页面骨架 */
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+/* 错误条在内容区顶部，与下方卡片留 12 */
+.notice {
+  margin-top: 12px;
+}
+
+/*
+ * TextField 把 password 归到 mono 类（密码点用等宽），但占位文案会跟着变等宽；
+ * 示意要求占位用 UI 字体（`docs/android-visual.md` §5.2）。在屏组本地覆盖回来，
+ * 不修改共用的 TextField，避免影响其它屏组的输入样式。
+ */
+.passwordPlaceholder input[type='password']::placeholder {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}

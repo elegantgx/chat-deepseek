@@ -1,0 +1,98 @@
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.text {
+  min-width: 0;
+  flex: 1;
+}
+
+/* 动作组：负边距抵掉内边距，视觉上贴着提示条右沿 */
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin: -3px -4px -3px 0;
+}
+
+/* 文字动作：比正文粗一档 */
+.action {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.info {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* 两条提示上下叠时留一点呼吸，避免贴成一块 */
+.notice + .notice {
+  margin-top: 10px;
+}
+
+/* 正文长又带动作：图标与正文占第一行，动作落到正文下一行并靠右 */
+.stacked {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+}
+
+.stacked .icon {
+  grid-area: 1 / 1;
+}
+
+.stacked .text {
+  grid-area: 1 / 2;
+}
+
+.stacked .actions {
+  grid-area: 2 / 2;
+  justify-self: end;
+}
+
+/* 聊天页顶栏下的提示条容器（示意 .chat-notice） */
+.chatNotice {
+  flex: 0 0 auto;
+  margin: 16px 0 8px;
+  padding: 0 16px;
+}

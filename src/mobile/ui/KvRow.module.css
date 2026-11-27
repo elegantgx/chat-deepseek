@@ -1,0 +1,38 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.label {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-align: right;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+/* 账户等纯文字值不用等宽，和左侧说明同一档字号 */
+.text {
+  font-family: var(--font-ui);
+  font-size: 13px;
+}

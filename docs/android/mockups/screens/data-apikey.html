@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390, initial-scale=1, viewport-fit=cover" />
+    <title>31 API Key</title>
+    <link rel="stylesheet" href="../mockup.css" />
+  </head>
+  <body>
+    <svg aria-hidden="true" style="position: absolute; width: 0; height: 0; overflow: hidden">
+      <defs>
+        <symbol id="i-back" viewBox="0 0 24 24">
+          <path d="M14.8 5.6 9.2 12l5.6 6.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+        </symbol>
+        <symbol id="i-signal" viewBox="0 0 18 12">
+          <rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor" />
+          <rect x="5" y="6" width="3" height="6" rx="1" fill="currentColor" />
+          <rect x="10" y="3.5" width="3" height="8.5" rx="1" fill="currentColor" />
+          <rect x="15" y="1" width="3" height="11" rx="1" fill="currentColor" />
+        </symbol>
+        <symbol id="i-wifi" viewBox="0 0 16 12">
+          <path d="M1.2 4.4a10 10 0 0 1 13.6 0M3.6 7a6.6 6.6 0 0 1 8.8 0M6 9.5a3.2 3.2 0 0 1 4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          <circle cx="8" cy="11" r="1" fill="currentColor" />
+        </symbol>
+        <symbol id="i-battery" viewBox="0 0 26 12">
+          <rect x="0.7" y="1.2" width="22" height="9.6" rx="3" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.45" />
+          <rect x="2.6" y="3.1" width="16.2" height="5.8" rx="1.8" fill="currentColor" />
+          <path d="M24.4 4.2v3.6c.9-.3 1.4-.9 1.4-1.8s-.5-1.5-1.4-1.8z" fill="currentColor" opacity="0.45" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <div class="phone settings-page">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="sb-icons">
+          <svg width="18" height="12"><use href="#i-signal" /></svg>
+          <svg width="16" height="12"><use href="#i-wifi" /></svg>
+          <svg width="26" height="12"><use href="#i-battery" /></svg>
+        </span>
+      </div>
+
+      <header class="settings-appbar">
+        <button class="back-btn" aria-label="返回">
+          <svg width="18" height="18"><use href="#i-back" /></svg>
+        </button>
+        <h1 class="settings-title">API Key</h1>
+        <span></span>
+      </header>
+
+      <div class="form-content">
+        <div class="pill-field is-placeholder"><span>输入 API Key</span></div>
+
+        <button class="btn btn-primary btn-block pill-submit is-disabled" type="button" disabled>确认</button>
+      </div>
+    </div>
+  </body>
+</html>

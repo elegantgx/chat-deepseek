@@ -1,0 +1,39 @@
+/* 备份列表：新建入口固定在顶部，列表区自己滚动（visual §7 #22） */
+.stack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.note {
+  margin: 24px 0 0 17px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 创建中的状态卡放在列表上方；与列表之间仍按 24 的组间距 */
+.statusCard {
+  margin-bottom: 24px;
+}
+
+/* 列表加载失败时提示条与顶部入口留 12，避免和卡片粘在一起 */
+.notice {
+  margin-top: 12px;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  color: var(--ink-3);
+}
+
+/* 空态下服务还在运行：入口只能禁用，但要把原因写出来（不能只留一个灰按钮） */
+.emptyReason {
+  margin: 8px 0 18px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}

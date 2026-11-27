@@ -1,0 +1,112 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 17px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+/* 可点击的行是 <button>，UA 会把文字居中，这里显式左对齐；纯展示的行保持继承，
+   和示意里 div 行的 text-align:start 一致 */
+button.row {
+  text-align: left;
+  cursor: pointer;
+}
+
+button.row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+/* 带副标题的行 64 高；不额外加 padding，靠居中让两行文字自己站稳 */
+.double {
+  min-height: 64px;
+}
+
+.icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--text);
+}
+
+.icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.subtitle {
+  margin-top: 1px;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.value {
+  flex: 0 0 auto;
+  max-width: 168px;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 16px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 等宽值（版本、路径、时间）比正文小一档，且允许更宽 */
+.valueMono {
+  max-width: 180px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.chevron {
+  flex: 0 0 auto;
+  margin-left: -1px;
+  color: var(--ink-4);
+}
+
+/* 危险行：标题与图标红，副标题保持灰（visual §4） */
+.danger .title,
+.danger .icon {
+  color: var(--danger);
+}
+
+/* 降级行：标题/图标/值 --ink-4；副标题仍是说明文字，不跟着变浅 */
+.muted,
+.muted .icon,
+.muted .value {
+  color: var(--ink-4);
+}
+
+.muted .title {
+  color: inherit;
+}

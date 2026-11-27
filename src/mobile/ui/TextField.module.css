@@ -1,0 +1,213 @@
+/* 字段根：负责与上一块的间距。首个字段贴容器顶，不叠 margin。
+   间距值来自示意：表单卡 16、胶囊字段 12、登录字段 18。 */
+.root {
+  min-width: 0;
+}
+
+.root + .root,
+.root:not(:first-child) {
+  margin-top: 16px;
+}
+
+.root:first-child {
+  margin-top: 0;
+}
+
+.pill:not(:first-child),
+.login:not(:first-child) {
+  margin-top: 12px;
+}
+
+.login:not(:first-child) {
+  margin-top: 18px;
+}
+
+.label {
+  display: block;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* 框本体：背景/圆角在这里，input 透明铺满，所以红圈阴影不会挤动布局 */
+.wrapper {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+
+/* 有标签时框与标签留 8（示意 `.field-label` 下 8）；胶囊输入一般不带标签 */
+.label + .wrapper,
+.label + .textareaWrapper {
+  margin-top: 8px;
+}
+
+.pill > .wrapper,
+.login > .wrapper {
+  height: 56px;
+  margin-top: 0;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.input {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+/* 表单卡里的值用等宽 13.5；占位文案仍用 UI 字体 15（示意 `.field.is-placeholder`） */
+.form .input {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+
+.form .input::placeholder {
+  color: var(--ink-4);
+  font-family: var(--font-ui);
+  font-size: 15px;
+}
+
+.pill .input,
+.login .input {
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.pill .input::placeholder,
+.login .input::placeholder {
+  color: var(--ink-4);
+}
+
+/* 密码点：字号固定 11 + 字距 3，占位文案再单独放大回 17 */
+.password {
+  font-size: 11px;
+  letter-spacing: 3px;
+}
+
+.password::placeholder {
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+/* 地址、路径等等宽值：表单 13.5，胶囊 15（示意 `.auth-field.is-mono`） */
+.mono .input {
+  font-family: var(--font-mono);
+}
+
+.pill .mono .input,
+.login .mono .input {
+  font-size: 15px;
+}
+
+.readonly {
+  color: var(--ink-3);
+}
+
+/* 聚焦给一圈淡品牌描边，不改变尺寸；错误态的红圈优先级更高 */
+.wrapper:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--brand-line);
+}
+
+.wrapperError,
+.wrapperError:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pill > .hint,
+.login > .hint {
+  margin-top: 12px;
+  padding-left: 4px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pill > .error,
+.login > .error {
+  margin: 12px 0 0 4px;
+}
+
+/* 多行输入：沿用表单卡语言，最小 96 高 */
+.textareaRoot {
+  margin-top: 16px;
+}
+
+.textareaWrapper {
+  height: auto;
+  min-height: 96px;
+  align-items: stretch;
+  padding: 12px 14px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.textarea::placeholder {
+  color: var(--ink-4);
+}
+
+/* 整组错误行：紧贴上一组输入，左边距 4（mockup .form-error） */
+.formError {
+  margin: 12px 0 0 4px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 表单页脚说明：默认居中；左对齐时按 form-note 缩进 16 */
+.formNote {
+  margin: 20px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.formNoteStart {
+  text-align: start;
+}
+
+.formNoteInset {
+  margin-left: 16px;
+}

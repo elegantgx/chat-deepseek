@@ -1,0 +1,534 @@
+/*
+ * 聊天两屏的版式。几何尽量逐字对齐 docs/android/mockups/screens/chat-*.html：
+ * 顶栏 60、欢迎区居中、输入卡 24 圆角、抽屉 310。
+ *
+ * 颜色只引用 `theme.ts` 注入的 token；Markdown 那一组 `--dsw-*` 是主站渲染器
+ * 依赖的变量名，这里把它们映射到 mobile token，避免屏里出现第二套字号/颜色。
+ */
+
+.screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: var(--chat-keyboard-inset, 0px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* 聊天页本体；抽屉打开时它被推到右侧并缩成一张圆角卡（示意 chat-drawer） */
+.pageSurface {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+  transform-origin: center center;
+  transition:
+    transform 0.24s ease,
+    border-radius 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+.pagePushed {
+  /* 卡片要压到状态栏下面，才能和示意一样从屏幕顶边开始圆角；
+     内容仍从安全区之后排，靠 padding-top 把系统状态栏的位置让出来。 */
+  height: calc(100% + env(safe-area-inset-top, 0px));
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  border-radius: 24px;
+  box-shadow: 0 0 32px var(--border);
+  transform: translateX(312px) scale(0.95);
+}
+
+.pageDim {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  opacity: 1;
+  transition: opacity 0.24s ease;
+}
+
+.pagePushed .pageDim {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 暗色下 --border 会变亮，32px 的泛光太重；收成更细的 --border-soft */
+:global([data-theme='dark']) .pagePushed {
+  box-shadow: 0 0 32px var(--border-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pageSurface,
+  .pageDim {
+    transition: none;
+  }
+}
+
+.barActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- 欢迎空态 ---------- */
+
+.welcome {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 24px 40px;
+}
+
+.greeting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.whale {
+  display: block;
+  width: 46px;
+  height: 46px;
+  color: var(--brand);
+}
+
+.greetingTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 30px;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- 消息列表 ---------- */
+
+.messageList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.messageInner {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px 10px;
+}
+
+/* 屏外消息跳过排版；不引虚拟列表依赖，先用浏览器原生的 content-visibility */
+.message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+  min-width: 0;
+}
+
+/* 助手消息自带 20 上距；用户气泡紧跟助手时补 24，避免两轮粘在一起 */
+.message:has(> .userBubble) {
+  margin-top: 24px;
+}
+
+.messageInner > .message:first-child:has(> .userBubble) {
+  margin-top: 0;
+}
+
+.userBubble {
+  min-width: 0;
+}
+
+.userText {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.userFiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.userFile {
+  background: var(--bg);
+}
+
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 2px;
+}
+
+.waitingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  animation: waiting 1.2s ease-in-out infinite;
+}
+
+.waitingDot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.waitingDot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes waiting {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waitingDot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.versions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+
+.versionButton {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.versionButton:active {
+  background: var(--fill);
+}
+
+.versionButton:disabled {
+  opacity: 0.35;
+}
+
+.versionPrev {
+  transform: rotate(180deg);
+}
+
+.versionCount {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.notice {
+  margin-top: 10px;
+}
+
+.noticeLink {
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.sources {
+  margin-top: 10px;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.sourceTitle {
+  margin-bottom: 4px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sourceLink {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* ---------- Markdown：把主站渲染器的变量接到 mobile token 上 ---------- */
+
+.markdown {
+  --ds-ease-in-out: ease;
+  --ds-font-family-code: var(--font-mono);
+  --ds-transition-duration: 0.15s;
+  --dsw-alias-border-l1: var(--border);
+  --dsw-alias-border-l2: var(--border-soft);
+  --dsw-alias-border-l3: var(--border);
+  --dsw-alias-brand-text: var(--brand);
+  --dsw-alias-interactive-bg-hover: var(--fill);
+  --dsw-alias-label-caption: var(--caption);
+  --dsw-alias-label-primary: var(--text);
+  --dsw-alias-label-secondary: var(--text-2);
+  --dsw-alias-label-tertiary: var(--ink-3);
+  --dsw-alias-markdown-citation: var(--brand-soft);
+  --dsw-alias-markdown-code-block: var(--fill-2);
+  --dsw-alias-markdown-code-block-banner: var(--fill);
+  --dsw-alias-markdown-inline-code: var(--fill);
+  --dsw-alias-markdown-placeholder: var(--fill);
+  --dsw-font-markdown-base: 400 16px/26px var(--font-ui);
+  --dsw-font-markdown-base-strong: 600 16px/26px var(--font-ui);
+  --dsw-font-markdown-code: 13px/20px var(--font-mono);
+  --dsw-font-markdown-code-block: 13px/20px var(--font-mono);
+  --dsw-font-markdown-h1: 600 22px/30px var(--font-ui);
+  --dsw-font-markdown-h2: 600 20px/28px var(--font-ui);
+  --dsw-font-markdown-h3: 600 18px/26px var(--font-ui);
+  --dsw-font-markdown-h4: 600 16px/24px var(--font-ui);
+  --dsw-font-markdown-table: 14px/22px var(--font-ui);
+  --dsw-font-markdown-table-head: 600 14px/22px var(--font-ui);
+  --dsw-font-xs-13: 400 13px/18px var(--font-ui);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.markdown :global(.md-code-block) {
+  max-width: 100%;
+  margin: 10px 0;
+  border-radius: 12px;
+  background: var(--fill-2);
+  color: var(--text);
+}
+
+.markdown :global(.md-code-block-banner) {
+  border-radius: 12px 12px 0 0;
+  color: var(--ink-3);
+}
+
+/* 代码块必须横向滚动：长行不参与气泡换行，也不会把 390 宽的布局顶开 */
+.markdown :global(.md-code-block > pre) {
+  max-width: 100%;
+  padding: 8px 14px 12px;
+  overflow-x: auto;
+  font: 13px/20px var(--font-mono);
+  white-space: pre;
+  word-break: normal;
+}
+
+.markdown :global(.md-code-block code) {
+  background: transparent;
+  font: inherit;
+}
+
+.markdown :global(.md-code-block-banner img),
+.markdown :global(.ds-markdown img) {
+  max-width: 100%;
+}
+
+.markdown :global(.markdown-table-wrapper) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown :global(.ds-markdown-cite) {
+  color: var(--brand);
+}
+
+.thinkingMarkdown {
+  composes: markdown;
+  --dsw-font-markdown-base: 400 14px/22px var(--font-ui);
+  --dsw-font-markdown-base-strong: 600 14px/22px var(--font-ui);
+  --dsw-font-markdown-h1: 600 18px/26px var(--font-ui);
+  --dsw-font-markdown-h2: 600 16px/24px var(--font-ui);
+  --dsw-font-markdown-h3: 600 15px/23px var(--font-ui);
+  --dsw-font-markdown-h4: 600 14px/22px var(--font-ui);
+  --dsw-font-markdown-table: 12px/18px var(--font-ui);
+  --dsw-font-markdown-table-head: 600 12px/18px var(--font-ui);
+  color: var(--ink-2);
+}
+
+.thinkingMarkdown :global(.md-code-block) {
+  margin: 8px 0;
+  background: var(--fill);
+}
+
+/* ---------- 输入区附件行 ---------- */
+
+.fileInput {
+  display: none;
+}
+
+.stopButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--brand-line);
+  border-radius: 18px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.stopMark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* ---------- 加载 / 出错 / 保存失败 ---------- */
+
+.centerState {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 24px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.centerState > :global(.notice) {
+  width: 100%;
+  max-width: 300px;
+}
+
+.saveBanner {
+  flex: 0 0 auto;
+  padding: 8px 16px 0;
+}
+
+/* ---------- 会话抽屉 ---------- */
+
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+/* 透明点击层：点抽屉右侧的聊天卡也能关，和系统级侧滑抽屉的行为一致 */
+.drawerDismiss {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.drawerPanel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: 310px;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  animation: drawerIn 0.22s ease;
+}
+
+@keyframes drawerIn {
+  from {
+    opacity: 0.5;
+    transform: translateX(-16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerPanel {
+    animation: none;
+  }
+}
+
+.sortButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.sortButton:active {
+  background: var(--fill);
+}
+
+.sessionMore {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+.accountMore {
+  color: var(--ink-3);
+}

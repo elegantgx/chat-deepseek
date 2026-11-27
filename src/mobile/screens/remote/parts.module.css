@@ -1,0 +1,65 @@
+/* 远程组的局部零件；尺寸逐字取自 mockup.css 的 .login-server / .prep-row。 */
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  margin-top: 36px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+  color: var(--text);
+}
+
+.icon {
+  flex: 0 0 auto;
+  color: var(--text);
+}
+
+/* 不做省略号：示例地址在 390 宽度内完整放得下，长 host 也先保证可读 */
+.name {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.prepRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text);
+}
+
+.prepDot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dot-mute);
+}

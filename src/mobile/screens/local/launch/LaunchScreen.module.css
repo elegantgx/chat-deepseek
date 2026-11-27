@@ -1,0 +1,15 @@
+/* 鲸鱼与按钮作为一块整体居中；左右 18 是页面留白，不额外加底部间距 */
+.center {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  min-height: 0;
+  padding: 0 18px;
+}
+
+.whale {
+  color: var(--brand);
+}

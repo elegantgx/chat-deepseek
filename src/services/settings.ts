@@ -26,6 +26,11 @@ type Settings = {
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
+  /**
+   * 服务端 preferences 里本端不认识的键（Android 的字号/语言偏好等）。
+   * 保存设置时原样带回，否则改一次主题就会把别的端的偏好抹掉。
+   */
+  extraPreferences: Record<string, unknown>
 }
 
 /** 位置选择模式跟随浏览器语言，与应用内选择的界面语言无关。 */
@@ -44,6 +49,7 @@ export const useSettings = create<Settings>(() => ({
   thinking: false,
   search: false,
   siderCollapsed: false,
+  extraPreferences: {},
 }))
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -86,6 +92,10 @@ const applyPreferences = (value: unknown) => {
   if (siderCollapsed !== undefined) {
     update.siderCollapsed = siderCollapsed
   }
+  // 未知键原样留着：桌面端不认识 fontSize 之类的键，但保存时不能把它们删掉。
+  update.extraPreferences = Object.fromEntries(
+    Object.entries(value).filter(([key]) => !KNOWN_PREFERENCE_KEYS.has(key))
+  )
   if (Object.keys(update).length > 0) {
     useSettings.setState(update)
   }
@@ -102,10 +112,37 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let saving = false
 let pending = false
 
+const KNOWN_PREFERENCE_KEYS = new Set([
+  'locale',
+  'themePreference',
+  'location',
+  'ttsVoice',
+  'thinking',
+  'search',
+  'siderCollapsed',
+])
+
 const preferencesSnapshot = () => {
-  const { locale, themePreference, location, ttsVoice, thinking, search, siderCollapsed } =
-    useSettings.getState()
-  return { locale, themePreference, location, ttsVoice, thinking, search, siderCollapsed }
+  const {
+    locale,
+    themePreference,
+    location,
+    ttsVoice,
+    thinking,
+    search,
+    siderCollapsed,
+    extraPreferences,
+  } = useSettings.getState()
+  return {
+    ...extraPreferences,
+    locale,
+    themePreference,
+    location,
+    ttsVoice,
+    thinking,
+    search,
+    siderCollapsed,
+  }
 }
 
 const flushPreferences = async () => {

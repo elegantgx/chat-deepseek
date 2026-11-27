@@ -1,0 +1,78 @@
+/* 卡片本身带圆角与卡片底：示意里它直接是 .settings-card.steps-card */
+.card {
+  margin-top: 24px;
+  padding: 10px 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 17px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+/* 圆点到下一个圆点的连线：左 = 17 内边距 + 11 半径 - 1 半线宽 */
+.step:not(:last-child)::after {
+  position: absolute;
+  top: 39px;
+  left: 27px;
+  width: 2px;
+  height: 34px;
+  border-radius: 1px;
+  background: var(--line);
+  content: '';
+}
+
+.done:not(:last-child)::after {
+  background: var(--green);
+}
+
+.mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.done .mark {
+  background: var(--green);
+  color: #ffffff;
+}
+
+.current .mark {
+  border: 1.5px solid var(--green);
+  color: var(--green);
+}
+
+.pending {
+  color: var(--ink-3);
+}
+
+.pending .mark {
+  border: 1.5px solid var(--pending-line);
+  color: var(--ink-4);
+}
+
+/* 失败步骤红底白叉，后面的步骤保持灰 */
+.failed {
+  color: var(--danger);
+}
+
+.failed .mark {
+  background: var(--danger);
+  color: #ffffff;
+}

@@ -1,0 +1,10 @@
+.error {
+  margin-top: 12px;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  color: var(--ink-3);
+}

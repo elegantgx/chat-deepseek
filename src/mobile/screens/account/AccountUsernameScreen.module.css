@@ -1,0 +1,7 @@
+/* 单输入页：字段与按钮的间距来自 TextField / shared.submit，这里只管列布局。 */
+.form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}

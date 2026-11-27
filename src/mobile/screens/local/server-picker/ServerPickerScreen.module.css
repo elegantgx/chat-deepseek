@@ -1,0 +1,104 @@
+/* 当前项只用一圈 1px 淡蓝，不加投影（示意 .server-option.is-current） */
+.current {
+  box-shadow: inset 0 0 0 1px var(--brand-line);
+}
+
+/* 卡的上半部分是整块可点区域：当前服务器的按钮是状态而不是入口 */
+.main {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--text);
+}
+
+.title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.dot,
+.dotIdle {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.dotIdle {
+  background: var(--dot-mute);
+}
+
+.desc {
+  display: block;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* 地址允许换行而不是省略号：390 宽下远程地址可能很长（验收要求无省略号截断） */
+.address {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.actions {
+  margin-top: 16px;
+}
+
+/* 示意里选项卡按钮比页面主按钮矮一档 */
+.action {
+  height: 46px;
+}
+
+.note {
+  margin: 24px 0 0 20px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}

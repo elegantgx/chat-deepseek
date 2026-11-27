@@ -1,0 +1,53 @@
+/* 圆形图标按钮：背景/颜色由变体决定，尺寸由 size 决定（示意 44/36/34） */
+.button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.button svg {
+  display: block;
+}
+
+/* 二级页返回键：34 圆 + --chip-fill 底（visual §3） */
+.chip {
+  background: var(--chip-fill);
+}
+
+/* 发送键：品牌色实心 + 白图标 */
+.brand {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.lg {
+  width: 44px;
+  height: 44px;
+}
+
+.md {
+  width: 36px;
+  height: 36px;
+}
+
+.sm {
+  width: 34px;
+  height: 34px;
+}
+
+/* 不可用只降透明度，不换灰底：和主按钮禁用的处理一致（示意 `.back-btn.is-disabled`） */
+.button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: default;
+}

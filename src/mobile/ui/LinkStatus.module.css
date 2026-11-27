@@ -1,0 +1,62 @@
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* 独立成行：替换掉 inline-flex，上下留 12 */
+.row {
+  display: flex;
+  margin: 12px 0;
+}
+
+.connecting {
+  color: var(--brand);
+}
+
+.connecting .dot {
+  background: var(--brand);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.reconnecting {
+  color: var(--warn);
+}
+
+.reconnecting .dot {
+  background: var(--warn);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.offline {
+  color: var(--danger);
+}
+
+.offline .dot {
+  background: var(--danger);
+}
+
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* 截图/省电：点停在常亮态，颜色语义还在 */
+@media (prefers-reduced-motion: reduce) {
+  .connecting .dot,
+  .reconnecting .dot {
+    animation: none;
+  }
+}

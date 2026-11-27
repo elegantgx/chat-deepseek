@@ -105,10 +105,14 @@ go test ./... && go vet ./...
 - 桌面端视觉已定稿（`docs/desktop-visual.md`），设计系统在 `desktop/renderer/ui/`，
   四个页面（服务/账户/备份/设置）已接真实 `ipc`，浏览器里由 `app/mock-host.ts` 顶着同一份契约。
 - **Android 产品形态已钉死**（`docs/android-product.md`）：主界面是聊天（对标 DeepSeek 官方 App）；
-  服务器可选（本机 / 远程自建服务端）；业务数据一律走 HTTP `/api/v1`，本机服务另有一份
-  **Android 自己的 ipc** 管启停/账户/备份/主机参数；本机仅监听回环、不能当服务端。
+  服务器可选（本机 / 远程自建服务端）；业务数据一律走 HTTP `/api/v1`，本机服务另有一条
+  **ipc** 管启停/账户/备份/主机参数（同一份 `chat-deepseek ipc`，独立子进程，wire 与桌面一致）；
+  本机仅监听回环、不能当服务端。
   **远程服务器只登录 + 聊天，App 不代管**（管理它要 SSH，不封装 SSH、不做远程运维面板）。
-  当前只做**静态 UI 示意**，不写产品代码。
+  **实现形态已定**（`docs/android-architecture.md`）：mobile Web 打包进 APK + WebView 渲染，
+  Kotlin 壳持有 ipc 与 HTTP（`host`/`net` 桥），渲染层无网络权限；首版 36 屏全上、只出 arm64、
+  CI 出 debug apk。**产品代码已落地**：36 屏 + 20 个状态分支在 `src/mobile/`，壳在 `android/`；
+  截图回归口径见 `docs/android-architecture.md` §9，真机验收待做。
 - 打包：`electron-builder.yml` 出 Linux/macOS 便携 zip（`chat-deepseek-<ver>-linux-amd64.zip`、
   `...-macos-arm64.zip`）和 Windows 只含单文件 NSIS setup 的 zip（`...-windows-amd64.zip`）；
   Go 二进制（也是 CLI）随包放在 `resources/bin/`；Linux 另发纯服务端 `...-linux-server-amd64.zip`。
@@ -120,6 +124,10 @@ go test ./... && go vet ./...
 - `docs/ipc.md`：本地控制面契约（信封、错误码、方法表、事件、与 `/api/v1` 的分工）。
 - `docs/android-product.md`：Android 产品形态（服务器本机/远程、ipc 与 `/api/v1` 的分工、
   主界面聊天、交付形式）。
+- `docs/android-visual.md`：Android 界面规范（36 屏、明暗 token、组件尺寸、流程、验收清单），
+  真源是 `docs/android/mockups/` 的静态示意与明暗两套截图。
+- `docs/android-architecture.md`：Android 工程形态（mobile Web / Kotlin 壳边界、ipc 子进程、
+  `host`/`net` 桥、构建与 CI、截图回归、风险），仅 Android。
 - `docs/desktop-visual.md`：桌面端视觉规范（层次、判据、尺寸、日志区）与核对方法。
 - `docs/operations.md`：门禁命令、手动冒烟与验收清单、发布流水线、版本规则、环境限制、历史决策。
 - `desktop/README.md`：Electron 骨架、`ipc` 桥、平台差异与已知限制。

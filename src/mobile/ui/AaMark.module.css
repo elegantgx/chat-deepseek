@@ -1,0 +1,21 @@
+/* 两个 A 同基线，字重 500、行高 1；字号差就是“可调字号”的示意（mockup .s-aa） */
+.mark {
+  display: flex;
+  align-items: baseline;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.mark b {
+  font-weight: 500;
+}
+
+.mark b:first-child {
+  font-size: 13.5px;
+}
+
+.mark b:last-child {
+  font-size: 17.5px;
+}

@@ -1,0 +1,26 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 通用垂直节奏：相邻块 24；提示条后紧跟动作行时收回 12。
+   动作行用 data 属性标记，因为两个类名来自不同 CSS Module，跨模块选不中。 */
+.cardStack > * + * {
+  margin-top: 24px;
+}
+
+.cardStack > [data-notice='true'] + [data-action-row='true'] {
+  margin-top: 12px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 10px;
+}
+
+/* 等分宽度，按钮内部再自己省略，不让长文案把一行撑破 */
+.buttonRow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}

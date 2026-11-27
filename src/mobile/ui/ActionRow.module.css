@@ -1,0 +1,14 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.text {
+  min-width: 0;
+  flex: 1;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}

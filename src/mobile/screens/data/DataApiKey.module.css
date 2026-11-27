@@ -1,0 +1,15 @@
+.submit {
+  margin-top: 20px;
+}
+
+.notice {
+  margin-top: 12px;
+}
+
+/* TextField 的 password 变体会把等宽字体带到占位文案上；示意的“输入 API Key”用 UI 字重。
+   只在本屏覆盖 placeholder，不改公共组件。 */
+.field input::placeholder {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  letter-spacing: 0;
+}

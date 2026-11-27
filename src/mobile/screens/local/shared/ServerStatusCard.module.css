@@ -1,0 +1,17 @@
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.title {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+}
+
+/* 胶囊作为 flex 直接子项右对齐（示意 .status-head .pill） */
+.pill {
+  margin-left: auto;
+}

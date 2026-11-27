@@ -1,0 +1,2758 @@
+/*
+ * Android 静态示意基座（无 JS、无构建）。
+ * 取色、圆角、控件尺寸与图标来自 src/（官方 chat-demo 样本）：
+ *   src/app/theme.css、src/components/chatInput/ChatInput.module.css、
+ *   src/components/session/{Welcome,MobileHeader}.module.css、src/components/base/icons.tsx
+ * 画布固定 390×844 dp，截图 @2x → 780×1688。
+ */
+
+:root {
+  /* 官方静态色（src/app/theme.css） */
+  --bg: #ffffff;
+  --text: #0f1115;
+  --text-2: #61666b;
+  --text-3: #81858c;
+  --caption: #adb2b8;
+  --brand: #3964fe;
+  --brand-soft: #edf3fe;
+  --brand-line: #b7c8fe;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-soft: rgba(0, 0, 0, 0.04);
+  --danger: #ec1313;
+  --green: #22c55e;
+  --fill: #f1f2f4;
+  /* 派生的中性色：暗色模式按同一张表整套替换 */
+  --ink-2: #6b6b70;
+  --ink-3: #8a8a8f;
+  --ink-4: #b3b3b8;
+  --fill-2: #f5f5f5;
+  --fill-3: #eceef1;
+  --chip-fill: #ededef;
+  --line: #e3e3e8;
+  --ring: #c6c6cc;
+  --track: #e0e0e5;
+  --tick: #d2d2d8;
+  --dot-mute: #c2c2c7;
+  --green-ink: #15803d;
+  --pending-line: #d8d8dd;
+
+  --group-bg: #f7f8fa;
+  --card: #ffffff;
+  --bubble: #edf3fe;
+
+  --font-ui:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans CJK SC',
+    'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'Roboto Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+
+  /* 输入卡：src ChatInput .home 阴影 */
+  --shadow-composer:
+    0 4px 12px 0 rgba(0, 0, 0, 0.02), 0 2px 2px 0 rgba(72, 104, 178, 0.01),
+    0 30px 60px 0 rgba(72, 104, 178, 0.03);
+}
+
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-feature-settings: 'kern';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.phone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 390px;
+  height: 844px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---------- 系统状态栏 ---------- */
+
+.statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 16px 0 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.sb-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sb-icons svg {
+  display: block;
+}
+
+/* ---------- 顶栏：src MobileHeader ---------- */
+
+.appbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 60px;
+  padding: 12px 10px 4px;
+}
+
+.appbar .bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--text);
+}
+
+.icon-btn svg {
+  display: block;
+}
+
+/* ---------- 欢迎区：src Welcome ---------- */
+
+.welcome {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 24px 40px;
+}
+
+.greeting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.greeting .whale {
+  display: block;
+  width: 46px;
+  height: 46px;
+  color: var(--brand);
+}
+
+.greeting h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 30px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* ---------- 输入卡：src ChatInput ---------- */
+
+.composer-dock {
+  flex: 0 0 auto;
+  padding: 0 16px 6px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--bg);
+  box-shadow: var(--shadow-composer);
+}
+
+.input-line {
+  min-height: 42px;
+  padding: 12px 12px 0 16px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--caption);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.input-line.is-filled {
+  color: var(--text);
+}
+
+.function-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px;
+}
+
+.toggles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.toggle svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.toggle.is-on {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* 输入卡右侧：src ChatInput 的语音 / 附件 / 发送，34 命中区，发送为品牌色圆钮 */
+.right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tool-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+}
+
+.tool-btn svg {
+  display: block;
+}
+
+.send-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.send-btn.is-disabled {
+  opacity: 0.4;
+}
+
+.caveat {
+  padding: 6px 0;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--ink-4);
+  user-select: none;
+}
+
+/* ---------- 后续屏复用：分组 / 行 / 按钮 ---------- */
+
+.group-label {
+  margin: 0 0 8px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-3);
+}
+
+.card {
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--text);
+}
+
+.row .row-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.row .row-value {
+  max-width: 164px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.chevron {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--text-3);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  height: 48px;
+  background: var(--brand);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn-secondary {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.btn-ghost {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+
+.btn-danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(236, 19, 19, 0.4);
+  color: var(--danger);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pill.is-running {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--green-ink);
+}
+
+.pill.is-stopped {
+  background: var(--group-bg);
+  color: var(--text-3);
+}
+
+.pill.is-error {
+  background: rgba(236, 19, 19, 0.08);
+  color: var(--danger);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+/* ---------- 后续屏复用：底部弹层 ---------- */
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9;
+  padding: 8px 16px 0;
+  border-radius: 24px 24px 0 0;
+  background: var(--card);
+}
+
+.sheet .grabber {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.sheet-title {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--text);
+}
+
+.sheet-sub {
+  margin: 4px 0 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-3);
+}
+
+.sheet-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 56px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
+}
+
+/* ---------- 会话抽屉（56.jpg 的结构；组件语言沿用 src） ---------- */
+
+.phone.is-drawer .statusbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 30;
+}
+
+/* 抽屉打开时，聊天页被整体推到右侧，变成一张左侧圆角的白卡（56.jpg 的层次） */
+.page {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: 390px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--bg);
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.15);
+  transform: translateX(312px) scale(0.95);
+  transform-origin: center center;
+}
+
+.page-dim {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 28px;
+  opacity: 0.5;
+}
+
+.chat-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 60px;
+  padding: 12px 10px 4px;
+}
+
+.chat-header .chat-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0 8px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.chat-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 0 16px 10px;
+}
+
+.msg-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg-user .bubble {
+  max-width: calc(100% - 68px);
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: var(--bubble);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.msg-assistant {
+  margin-top: 20px;
+  padding-bottom: 8px;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--text);
+}
+
+.phone.is-drawer .drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: 310px;
+  background: var(--bg);
+}
+
+.drawer-search {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  margin: 50px 24px 0 22px;
+  padding: 0 18px 0 16px;
+  border-radius: 26px;
+  background: var(--fill-2);
+  color: var(--ink-3);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.drawer-search svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.drawer-search span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 14px;
+  padding: 0 12px;
+  overflow: hidden;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  margin-top: 14px;
+  padding: 0 10px;
+  color: var(--ink-3);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.drawer-body > .section-head:first-child {
+  margin-top: 0;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 50px;
+  margin-bottom: 2px;
+  padding: 0 14px 0 16px;
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.session-row .session-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.session-row.is-active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.session-row .session-more {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--ink-3);
+}
+
+.drawer-bottom {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  height: 68px;
+  padding: 0 12px 14px 14px;
+}
+
+.avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fill-3);
+  color: var(--ink-3);
+}
+
+.who {
+  min-width: 0;
+  flex: 1;
+}
+
+.who .name {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.drawer-more {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--ink-3);
+}
+
+/* ---------- 设置页（045805 的分组卡结构；第一组为服务器） ---------- */
+
+.settings-page {
+  background: var(--group-bg);
+}
+
+.settings-appbar {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  height: 56px;
+  padding: 0 18px;
+}
+
+.back-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chip-fill);
+  color: var(--text);
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  color: var(--text);
+}
+
+.settings-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 18px 0;
+  overflow: hidden;
+}
+
+/* 组间距 = 组上边距 + 组标题 + 标题下边距，对应截图里两张卡之间约 58dp */
+.settings-group + .settings-group {
+  margin-top: 24px;
+}
+
+.settings-label {
+  margin: 0 0 8px 17px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--ink-3);
+}
+
+.settings-card {
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+/* 退出登录等独立卡片与上方卡片之间留 30dp，比组间距更松 */
+.settings-card.is-standalone {
+  margin-top: 30px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 52px;
+  padding: 0 17px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.settings-row .s-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--text);
+}
+
+.settings-row .s-main {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-row .s-sub {
+  margin-top: 1px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+
+.settings-row.is-double {
+  height: 64px;
+}
+
+.settings-row.is-double .s-title {
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-row.is-double .s-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-row .s-value {
+  flex: 0 0 auto;
+  max-width: 168px;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+
+.settings-row .s-value.is-mono {
+  max-width: 180px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.settings-row .s-chevron {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-left: -1px;
+  color: var(--ink-4);
+}
+
+/* 字体大小：小 A 与大 A 同基线，靠字高体现“可调字号” */
+.settings-row .s-aa {
+  display: flex;
+  align-items: baseline;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.settings-row .s-aa > b {
+  font-weight: 500;
+}
+
+.settings-row .s-aa > b:first-child {
+  font-size: 13.5px;
+}
+
+.settings-row .s-aa > b:last-child {
+  font-size: 17.5px;
+}
+
+.settings-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 12px 24px 12px;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--ink-4);
+}
+
+.settings-footer .mono {
+  font-size: 11.5px;
+}
+
+/* ---------- 本机服务器详情（设置 → 服务器 → 本机） ---------- */
+
+.server-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 4px 18px 0;
+  overflow: hidden;
+}
+
+.status-card {
+  padding: 16px 17px;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.status-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.status-text {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+  color: var(--text);
+}
+
+.status-head .pill {
+  margin-left: auto;
+}
+
+.pill.is-muted {
+  background: var(--fill);
+  color: var(--ink-3);
+}
+
+.kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.kv {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.kv-label {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+
+.kv-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-align: right;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.status-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.status-actions .btn {
+  flex: 1;
+}
+
+.loop-note {
+  margin: 24px 0 0 17px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+
+/* ---------- 切换或添加服务器（本机 / 远程两卡） ---------- */
+
+.picker-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 18px 0;
+  overflow: hidden;
+}
+
+.server-option {
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.server-option + .server-option {
+  margin-top: 16px;
+}
+
+/* 当前项只用一圈 1px 淡蓝，不加投影 */
+.server-option.is-current {
+  box-shadow: inset 0 0 0 1px var(--brand-line);
+}
+
+.opt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.opt-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--text);
+}
+
+.opt-title {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.opt-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.opt-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.server-option .opt-desc {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-2);
+}
+
+.server-option .opt-mono {
+  margin-top: 6px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+
+.server-option .opt-actions {
+  margin-top: 16px;
+}
+
+.server-option .opt-actions .btn {
+  height: 46px;
+}
+
+.btn.is-disabled {
+  background: var(--fill);
+  color: var(--ink-3);
+}
+
+.picker-notes {
+  margin-top: 24px;
+  padding-left: 20px;
+}
+
+.picker-notes p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.picker-notes p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- 添加远程服务器（地址 + 测试连接） ---------- */
+
+.form-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 18px 0;
+  overflow: hidden;
+}
+
+.form-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--card);
+}
+
+.field-label {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  margin-top: 8px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+}
+
+.field-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.form-submit {
+  height: 48px;
+  margin-top: 16px;
+}
+
+.form-content .settings-group {
+  margin-top: 28px;
+}
+
+.prep-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--text);
+}
+
+.prep-row .dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dot-mute);
+}
+
+/* ---------- 远程登录（身份卡 + 用户名 / 密码） ---------- */
+
+.login-server {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ls-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.ls-name {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ls-mono {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink-3);
+}
+
+.login-form {
+  margin-top: 16px;
+}
+
+.field-group + .field-group {
+  margin-top: 14px;
+}
+
+.form-note {
+  margin: 20px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+/* 整宽按钮统一胶囊形：两端半圆，长度靠宽度说话 */
+.btn-block {
+  border-radius: 999px;
+}
+
+/* ---------- 远程登录（照 100023：白底、大标题、胶囊输入、胶囊主按钮） ---------- */
+
+.auth-page {
+  background: var(--bg);
+}
+
+.auth-appbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 56px;
+  padding: 0 18px;
+}
+
+.auth-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 36px;
+  overflow: hidden;
+}
+
+.auth-title {
+  margin: 44px 0 0;
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: var(--text);
+}
+
+.auth-sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.auth-sub .mono {
+  font-size: 12.5px;
+}
+
+.auth-sub .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.auth-fields {
+  margin-top: 46px;
+}
+
+.auth-field {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.auth-field + .auth-field {
+  margin-top: 18px;
+}
+
+.auth-field.is-mono {
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+.auth-field.is-placeholder {
+  color: var(--ink-4);
+}
+
+.auth-submit {
+  height: 52px;
+  margin-top: 44px;
+  font-size: 17px;
+}
+
+.auth-note {
+  margin: 20px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* 密码占位点：小字号 + 字距，避免 ● 字号跟着输入框变大显得又粗又重 */
+.pw {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--text);
+}
+
+/* ---------- 远程登录：头卡 + 胶囊输入 + 胶囊主按钮 ---------- */
+
+.login-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 18px;
+  overflow: hidden;
+}
+
+/* 服务器条：和输入框同一形状语言（56 高 / 圆角 28），不做方形卡片 */
+.login-server {
+  margin-top: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+}
+
+.login-server-icon {
+  flex: 0 0 auto;
+  color: var(--text);
+}
+
+.login-server-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.login-server-status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.login-server-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.login-page.is-light {
+  background: var(--group-bg);
+}
+
+.login-page.is-white {
+  background: var(--bg);
+}
+
+.login-page.is-white .login-server {
+  background: var(--fill-2);
+}
+
+.login-page.is-white .login-server .opt-icon {
+  background: var(--card);
+}
+
+.login-fields {
+  margin-top: 20px;
+}
+
+.login-field {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.login-page.is-light .login-field {
+  background: var(--card);
+}
+
+.login-field + .login-field {
+  margin-top: 18px;
+}
+
+.login-submit {
+  height: 52px;
+  margin-top: 40px;
+  font-size: 17px;
+}
+
+.login-note {
+  margin: 20px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* ---------- 远程详情：账户等纯文字值不用等宽 ---------- */
+
+.kv-value.is-text {
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.settings-row.is-danger,
+.settings-row.is-danger .s-icon {
+  color: var(--danger);
+}
+
+/* 条件不满足的动作入口：整行降级，右侧写清原因 */
+.settings-row.is-muted,
+.settings-row.is-muted .s-icon,
+.settings-row.is-muted .s-value {
+  color: var(--ink-4);
+}
+
+/* ---------- 本机备份：新建入口固定在顶部，列表区自己滚动 ---------- */
+
+.backup-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 24px;
+  overflow-y: auto;
+}
+
+/* ---------- 主机参数：字段间距与只读字段 ---------- */
+
+.field + .field-label {
+  margin-top: 16px;
+}
+
+.field.is-readonly {
+  color: var(--ink-3);
+}
+
+.field-hint + .field-label {
+  margin-top: 16px;
+}
+
+/* 主按钮禁用：保留品牌色只降透明度，跟随 src/components/base/Button 的 disabled 处理 */
+.btn-primary.is-disabled {
+  background: var(--brand);
+  color: #fff;
+  opacity: 0.45;
+}
+
+/* ---------- API Key 输入（掩码占位） ---------- */
+
+.key-dots {
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  color: #adb2b8;
+}
+
+/* ---------- 居中确认弹窗（对齐官方 64/65 的形态） ---------- */
+
+.modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 9;
+  width: 300px;
+  border-radius: 20px;
+  background: var(--card);
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+}
+
+.modal-title {
+  margin: 0;
+  padding: 22px 20px 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  color: var(--text);
+}
+
+.modal-body {
+  margin: 0;
+  padding: 6px 20px 20px;
+  font-size: 14px;
+  line-height: 21px;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.modal-actions {
+  display: flex;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.modal-actions > button {
+  flex: 1;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.modal-actions > button + button {
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.modal-cancel {
+  color: var(--ink-2);
+}
+
+.modal-danger {
+  color: var(--danger);
+}
+
+/* 空输入框的占位文案：用 UI 字体，避免等宽字体把 placeholder 拉散 */
+.field.is-placeholder {
+  color: var(--ink-4);
+  font-family: var(--font-ui);
+  font-size: 15px;
+}
+
+/* ---------- 单输入页：胶囊输入框 + 主按钮（对齐登录页形态） ---------- */
+
+.pill-field {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.pill-field + .pill-field {
+  margin-top: 12px;
+}
+
+.pill-field.is-placeholder {
+  color: var(--ink-4);
+}
+
+.pill-submit {
+  height: 52px;
+  margin-top: 20px;
+  font-size: 17px;
+}
+
+.pill-hint {
+  margin: 12px 0 0;
+  padding-left: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+/* ---------- 字体大小（63）：预览区 + 底部调节面板 ---------- */
+
+.fontpreview {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 26px 18px 0;
+  overflow: hidden;
+}
+
+.fontpreview .bubble {
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  margin-left: auto;
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: var(--bubble);
+  font-size: 17px;
+  line-height: 24px;
+  color: var(--text);
+}
+
+.fontpreview .preview-text {
+  margin: 26px 0 0;
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--text);
+}
+
+.fontpanel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 244px;
+  padding: 22px 20px 44px;
+  border-radius: 24px 24px 0 0;
+  background: var(--card);
+}
+
+.fontpanel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 51px;
+  height: 31px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.switch.is-on {
+  background: var(--green);
+}
+
+.switch .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.switch.is-on .knob {
+  left: 22px;
+}
+
+.slider-block {
+  position: relative;
+  margin-top: auto;
+  padding: 0 2px;
+}
+
+.slider-labels {
+  position: relative;
+  height: 22px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.slider-labels .a-s {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  font-size: 13.5px;
+  line-height: 18px;
+}
+
+.slider-labels .a-l {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 17.5px;
+  line-height: 20px;
+}
+
+.slider-labels .slider-value {
+  position: absolute;
+  bottom: 0;
+  left: 25%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.slider-track {
+  position: relative;
+  height: 4px;
+  margin: 24px 0 12px;
+  border-radius: 999px;
+  background: var(--track);
+}
+
+.slider-track .tick {
+  position: absolute;
+  top: 50%;
+  width: 1.5px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--tick);
+  transform: translate(-50%, -50%);
+}
+
+.slider-track .thumb {
+  position: absolute;
+  top: 50%;
+  left: 25%;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+}
+
+/* ---------- 单选弹窗：标题 + 选项列表 + 整行确认（官方 64/65） ---------- */
+
+.modal-list {
+  margin-top: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.modal-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 22px;
+  font-size: 17px;
+  line-height: 22px;
+  color: var(--text);
+}
+
+/* 圆点和描边都用整数像素，避免半像素取整后看起来偏向一侧 */
+.radio {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--ring);
+  border-radius: 50%;
+}
+
+.radio.is-on {
+  border-color: var(--brand);
+  border-width: 2px;
+}
+
+.radio .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.modal-confirm {
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  color: var(--brand);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+/* 带图标的单选弹窗（官方 65 的地球 + 语言） */
+.modal-icon {
+  display: flex;
+  justify-content: center;
+  padding-top: 22px;
+  color: var(--text);
+}
+
+.modal-icon + .modal-title {
+  padding-top: 8px;
+}
+
+/* ---------- 账号管理：大头像 + 账户信息 ---------- */
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0 0;
+}
+
+.profile-name {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 26px;
+  color: var(--text);
+}
+
+.avatar-lg {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.avatar-lg .badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--text);
+}
+
+/* ---------- 本机状态变体：未初始化 / 停止用灰点，准备中用品牌色 ---------- */
+
+.status-dot.is-idle {
+  background: var(--dot-mute);
+}
+
+.status-dot.is-failed {
+  background: var(--danger);
+}
+
+.status-dot.is-busy {
+  background: var(--brand);
+}
+
+/* 初始化步骤卡：1-2-3 竖向串起来，绿色表示已走过 */
+.steps-card {
+  margin-top: 24px;
+  padding: 10px 0;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 56px;
+  padding: 0 17px;
+  font-size: 17px;
+  line-height: 22px;
+  color: var(--text);
+}
+
+/* 圆点到下一个圆点的连线：左 = 17px 内边距 + 11px 半径 - 1px 半线宽 */
+.step:not(:last-child)::after {
+  position: absolute;
+  top: 39px;
+  left: 27px;
+  width: 2px;
+  height: 34px;
+  border-radius: 1px;
+  background: var(--line);
+  content: '';
+}
+
+.step.is-done:not(:last-child)::after {
+  background: var(--green);
+}
+
+.step .mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.step.is-done .mark {
+  background: var(--green);
+  color: #fff;
+}
+
+.step.is-current .mark {
+  border: 1.5px solid var(--green);
+  color: var(--green);
+}
+
+.step.is-pending {
+  color: var(--ink-3);
+}
+
+.step.is-pending .mark {
+  border: 1.5px solid var(--pending-line);
+  color: var(--ink-4);
+}
+
+/* 初始化失败的步骤：红底白叉，后面的步骤保持灰 */
+.step.is-failed {
+  color: var(--danger);
+}
+
+.step.is-failed .mark {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* 失败原因单独一行，用危险色区别于普通说明 */
+.loop-note.is-danger {
+  color: var(--danger);
+}
+
+/* 输入框校验失败：红圈 + 红色说明，与「写错才标红」的约定一致 */
+.field.is-error {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+.field-hint.is-danger {
+  color: var(--danger);
+}
+
+/* 登录失败：两个输入框都标红（服务端只回「凭据不对」，指不出是哪一个） */
+.login-field.is-error {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+/* 表单错误行：登录、创建账户等胶囊输入页共用 */
+.form-error {
+  margin: 12px 0 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--danger);
+}
+
+.login-error + .login-submit,
+.form-error + .login-submit {
+  margin-top: 28px;
+}
+
+.form-error + .pill-field {
+  margin-top: 12px;
+}
+
+/* 胶囊输入页的校验失败 */
+.pill-field.is-error {
+  box-shadow: inset 0 0 0 1.5px var(--danger);
+}
+
+/* 角色单选：卡片行右侧用 radio，代替箭头 */
+.settings-row .radio {
+  flex: 0 0 auto;
+}
+
+.form-content .settings-group + .pill-submit {
+  margin-top: 28px;
+}
+
+/* ---------- 首次启动：品牌鲸鱼 + 选择服务器 ---------- */
+
+/* 鲸鱼和按钮作为一个整体居中，按钮不贴底 */
+.launch-center {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 44px;
+  padding: 0 18px;
+}
+
+.launch-whale {
+  width: 132px;
+  height: 132px;
+  color: var(--brand);
+}
+
+.launch-center .btn {
+  width: 100%;
+  height: 52px;
+  font-size: 17px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .phone {
+    --bg: #151517;
+    --text: #f9fafb;
+    --text-2: #cfd3d6;
+    --text-3: #adb2b8;
+    --caption: #81858c;
+    --brand: #5686fe;
+    --brand-soft: #283142;
+    --brand-line: #34415b;
+    --border: rgba(255, 255, 255, 0.12);
+    --border-soft: rgba(255, 255, 255, 0.06);
+    --danger: #f25a5a;
+    --fill: #353638;
+    --fill-2: #353638;
+    --fill-3: #3a3b3f;
+    --chip-fill: #3a3b3f;
+    --group-bg: #151517;
+    --card: #2c2c2e;
+    --bubble: #283142;
+    --ink-2: #c3c7cd;
+    --ink-3: #a2a7ad;
+    --ink-4: #7e828a;
+    --line: #3d3e42;
+    --ring: #55585f;
+    --track: #3a3b3f;
+    --tick: #55585f;
+    --dot-mute: #5a5d63;
+    --green-ink: #4ed17e;
+    --pending-line: #3d3e42;
+    --shadow-composer: none;
+  }
+}
+
+/* ==========================================================================
+ * §5.1 缺状态的原语（追加段）
+ *
+ * 36 屏只覆盖了"稳定态"：服务器不是已停止就是运行中，列表不是为空就是
+ * 有数据。实现一定会遇到启动中、停止中、备份/上传进度、失败重试、空列表、
+ * 断线重连、阻塞恢复这些过渡态。这一段把它们的通用零件一次补齐，后面各屏
+ * 只组合，不再各自发明。
+ *
+ * 约定：
+ * - 只追加，不改上方任何已有选择器与 token 值；
+ * - 颜色、圆角、字号、间距全部取自上面的 :root token；
+ * - 暗色只换颜色，尺寸不动（新补的三个颜色 token 在段末成对给暗色值）。
+ * ========================================================================== */
+
+/* 警告是第三种语义色：既有 token 只有品牌蓝、危险红、绿色。
+ * "有代价但还能继续"（停止服务、离线重连）既不能画成红也不能画成蓝，
+ * 所以补一组琥珀色；底色沿用 .pill.is-error 那种同色低透明度的写法。
+ * --danger-soft 同理，用于整块错误条，比给每条提示写一遍 rgba 好维护。 */
+:root {
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.08);
+  --danger-soft: rgba(236, 19, 19, 0.08);
+}
+
+/* ---------- 转圈：按钮内、阻塞卡内、行内状态共用 ---------- */
+
+/* 16 给 48 高按钮，12 给行内小状态，24 给阻塞卡。
+ * 颜色继承 currentColor：主按钮里是白圈，危险按钮里是红圈，不用另写变体。 */
+.spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner.is-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.spinner.is-lg {
+  width: 24px;
+  height: 24px;
+  border-width: 2.5px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- 按钮 loading ---------- */
+
+/* 进行中的按钮只有一种画法：保留按钮自己的颜色，内容换成"转圈 + 进行时
+ * 文案"，同时禁掉再点。不额外降透明度——半透明会和"禁用"混成同一个状态。 */
+.btn.is-loading {
+  pointer-events: none;
+}
+
+/* 返回键不可用（启动中不能退回）时只降透明度，和主按钮禁用的处理一致，
+ * 不换成灰底：灰底会让人以为这里本来就没有按钮。 */
+.back-btn.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ---------- 进度：确定进度（百分比 + 大小文案）与不确定进度 ---------- */
+
+/* 步骤条只适合"一步一步"的初始化；备份、恢复、上传没有固定步数，
+ * 必须用进度条。轨道用 --fill、填充用 --brand，暗色自动跟着换。 */
+.progress-block {
+  margin-top: 16px;
+}
+
+.progress-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.progress-head .ph-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 百分比是"值"，用等宽 + 主文字色，和左边的说明拉开层次 */
+.progress-head .ph-value {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+.progress .bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+
+/* 不知道总进度时铺满整条的斜纹：静态截图也能看出"还在走"，
+ * 动起来就是往右滚动的条纹。截图时模拟 prefers-reduced-motion，
+ * 条纹停在原位，产物可复现。
+ * 平移量 28.3px 是 -45° 斜纹一个水平周期（20px / cos45°），循环无缝。 */
+.progress.is-indeterminate .bar {
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--brand) 0 10px,
+    var(--brand-line) 10px 20px
+  );
+  animation: progress-stripes 0.9s linear infinite;
+}
+
+@keyframes progress-stripes {
+  to {
+    background-position: 28.3px 0;
+  }
+}
+
+/* 大小文案（12.4 MB / 20.0 MB）与剩余时间左右分列；
+ * 填充宽度由使用方写在 style 上（如 style="width: 62%"），这里不写死。 */
+.progress-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+/* ---------- 顶部 / 行内提示条：错误、警告、信息 ---------- */
+
+/* 校验错误贴着输入框（.form-error）；这里解决的是"整块状态"的提示：
+ * 带图标、可换行、右侧可选一个动作（重试、查看原因）。
+ * 三档语义固定：红 = 失败，琥珀 = 有代价但还能继续，蓝 = 说明。 */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.notice .n-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.notice .n-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.notice .n-action {
+  flex: 0 0 auto;
+  height: 24px;
+  margin: -3px -4px -3px 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.notice.is-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.notice.is-warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.notice.is-info {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* 两条提示上下叠时留一点呼吸，避免贴成一块 */
+.notice + .notice {
+  margin-top: 10px;
+}
+
+/* ---------- 重试 / 次级操作行 ---------- */
+
+/* 失败或空态下，一行"说明 + 一个文字按钮"比整宽主按钮轻，
+ * 不会把页面唯一的视觉重点抢走。动作本身用 .text-btn。 */
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.action-row .ar-text {
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.text-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--brand);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.text-btn.is-danger {
+  color: var(--danger);
+}
+
+/* ---------- 空态块：图标 + 标题 + 说明 + 可选按钮 ---------- */
+
+/* 列表为空（账户、备份、会话）时不能只留一块空白；也不做整屏大插画，
+ * 保持和行、卡片同一套尺度，放进卡片或内容区都成立。 */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 20px 10px;
+  text-align: center;
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--ink-3);
+}
+
+.empty-title {
+  margin-top: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  color: var(--text);
+}
+
+.empty-desc {
+  max-width: 260px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+/* 空态动作比页面主按钮小一档，但仍保持胶囊形 */
+.empty .btn {
+  height: 40px;
+  margin-top: 16px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+/* ---------- 连接状态小点：连接中 / 已断开重连 ---------- */
+
+/* 服务状态卡管"服务器起没起"，这里管"这一条连接还能不能用"：
+ * 6px 圆点 + 一行 12px 说明，放在状态卡、聊天顶部、登录 chip 里都不占地方。 */
+.link-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+.link-status .dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.link-status.is-connecting {
+  color: var(--brand);
+}
+
+.link-status.is-connecting .dot {
+  background: var(--brand);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* 已断开、正在重连：用警告色而不是红色，因为这是可自愈的过程，
+ * 不是最终失败（最终失败才用 .is-offline / --danger）。 */
+.link-status.is-reconnecting {
+  color: var(--warn);
+}
+
+.link-status.is-reconnecting .dot {
+  background: var(--warn);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.link-status.is-offline {
+  color: var(--danger);
+}
+
+.link-status.is-offline .dot {
+  background: var(--danger);
+}
+
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- 阻塞遮罩：恢复备份这类不能中途退出的动作 ---------- */
+
+/* 弹窗问的是"要不要做"，这里表达的是"正在做、别动"：盖住整页、不给取消，
+ * 只说清在做什么和为什么不能退出。层级压在弹层（9）与抽屉（20/30）之上；
+ * 遮罩色沿用 .scrim 的 rgba(0,0,0,.32)。 */
+.blocking {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  padding: 0 36px;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.blocking-card {
+  width: 100%;
+  max-width: 300px;
+  padding: 24px 20px;
+  border-radius: 20px;
+  background: var(--card);
+  text-align: center;
+}
+
+.blocking-icon {
+  display: flex;
+  justify-content: center;
+  color: var(--brand);
+}
+
+.blocking-title {
+  margin-top: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--text);
+}
+
+.blocking-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+/* 截图与省电场景：动画停在可读的静态造型，尺寸不变，肉眼仍能看出"进行中" */
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .link-status.is-connecting .dot,
+  .link-status.is-reconnecting .dot,
+  .progress.is-indeterminate .bar {
+    animation: none;
+  }
+}
+
+/* 新增的三个语义色在暗色下成对替换；作用域跟上方既有暗色段一致，
+ * 都挂在 .phone 上，旧 token 的暗色值保持在上方原处。 */
+@media (prefers-color-scheme: dark) {
+  .phone {
+    --warn: #f0b35e;
+    --warn-soft: rgba(240, 179, 94, 0.14);
+    --danger-soft: rgba(242, 90, 90, 0.14);
+  }
+}
+
+/* ==========================================================================
+ * §5.1 缺状态的原语（第三段追加）
+ *
+ * 输入区上方待发送的附件、输入区禁用态、聊天页顶部提示条：这三样在每个
+ * 断网/上传屏都会重复出现，不能每屏各拼一次。仍然只追加，不改上方选择器；
+ * 尺寸取视觉规范里的正文小字号与现有输入区节奏，暗色只换 token。
+ * ========================================================================== */
+
+/* ---------- 输入区上方的待发送附件行 ---------- */
+
+/* 附件行贴在输入卡上沿，用 --fill-2 和聊天画布拉开一档；正常态不画边，
+ * 失败态只把透明边换成红边，行高不变（避免整块输入区跟着跳）。 */
+.attach-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.attach-row .a-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--ink-3);
+}
+
+.attach-row .a-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.attach-row .a-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 文件名用正文小字号（14/20）和主文字色，不能退回 12px 的说明色；
+ * 单行省略只在文件名真的过长时兜底，390 画布内不会触发。 */
+.attach-row .a-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.attach-row .a-percent {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.attach-row .a-note {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+
+/* 行内动作沿用 .text-btn，只把命中区收到附件行的高度，不另造按钮 */
+.attach-row .a-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin: -2px -4px -2px 0;
+}
+
+.attach-row .text-btn {
+  height: 24px;
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+/* 上传中：4px 细条压在文件名下面。轨道换成 --line，--fill-2 底上才看得见 */
+.attach-row .progress {
+  height: 4px;
+  margin-top: 8px;
+  background: var(--line);
+}
+
+.attach-row.is-failed {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.attach-row.is-failed .a-icon,
+.attach-row.is-failed .a-title,
+.attach-row.is-failed .a-note,
+.attach-row.is-failed .text-btn {
+  color: var(--danger);
+}
+
+/* ---------- 输入区禁用：离线、服务停止时不能发消息 ---------- */
+
+/* 整块输入卡换成 --fill-2，边框收掉，占位文字用 --ink-3 而不是更浅的
+ * --caption：要一眼看出不能输入，但文字还得读得清。 */
+.composer.is-disabled {
+  border-color: transparent;
+  background: var(--fill-2);
+  pointer-events: none;
+}
+
+.composer.is-disabled .input-line {
+  color: var(--ink-3);
+}
+
+.composer.is-disabled .toggle {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--ink-4);
+}
+
+.composer.is-disabled .tool-btn,
+.tool-btn.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.composer.is-disabled .send-btn {
+  opacity: 0.4;
+}
+
+/* ---------- 聊天页顶部提示条 ---------- */
+
+/* 顶栏下面放整块提示（离线、重连）的容器：左右 16 与消息区同宽，
+ * 上 16 和顶栏拉开，下 8 不贴第一条消息。里面直接放 .notice。 */
+.chat-notice {
+  flex: 0 0 auto;
+  margin: 16px 0 8px;
+  padding: 0 16px;
+}
+
+/* ==========================================================================
+ * 进度/状态屏补充原语（追加段）
+ *
+ * 前面 §5.1 补了进度、提示条、阻塞遮罩，但行内状态一直借 .link-status
+ * （连接态语义）或往行里塞 .s-value。这里补两个语义中性的零件：
+ * 行内状态 .row-status，和 .server-content 下多张卡片的统一间距 .card-stack。
+ * ========================================================================== */
+
+/* ---------- 行内状态：转圈/圆点 + 状态文字 ---------- */
+
+/* 列表行右侧用：正在删除、正在导出、导入失败。
+ * 默认三级文字色；.is-busy 用品牌色表示进行中，.is-error 用危险色表示失败。
+ * 12/16 是行副标题的尺度，在 52 高的行里垂直居中，与右侧的值/箭头同一行。 */
+.row-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+/* 失败这类用 6px 圆点做标记；进行中用 .spinner，颜色都继承 currentColor。 */
+.row-status .dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.row-status.is-busy {
+  color: var(--brand);
+}
+
+.row-status.is-error {
+  color: var(--danger);
+}
+
+/* ---------- 卡片栈：.server-content 下相邻卡片的统一间距 ---------- */
+
+/* 之前多张卡要么写 inline margin-top，要么套一层 .settings-group；这里给
+ * 容器一个类，相邻卡片统一 24。卡片自己的修饰优先：.is-standalone 仍是
+ * 30；.action-row 紧跟提示条时仍是 12，不按卡片间距拉开。 */
+.card-stack > * + * {
+  margin-top: 24px;
+}
+
+.card-stack > .notice + .action-row {
+  margin-top: 12px;
+}
+
+/* ---------- 提示条：正文 + 动作改为上下排 ---------- */
+
+/* 正文较长、右侧又带 .n-action 时，360 宽下正文会被挤成十六七字一行。
+ * 加 .is-stacked 后图标和正文占第一行，动作换到正文下一行并靠右，
+ * 与弹窗动作区、.action-row 的右对齐习惯一致。行距沿用 .notice 的 gap。 */
+.notice.is-stacked {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+}
+
+.notice.is-stacked .n-icon {
+  grid-area: 1 / 1;
+}
+
+.notice.is-stacked .n-text {
+  grid-area: 1 / 2;
+}
+
+.notice.is-stacked .n-action {
+  grid-area: 2 / 2;
+  justify-self: end;
+}
+
+/* ---------- 通用垂直节奏：提示条 / 状态行 / 卡片 ---------- */
+
+/* 这些块本身不带 margin，放进 .stack 后相邻块统一 24。动作行紧跟提示条时
+ * 仍按 12，不把同一条提示和它的操作拆成两组。 */
+.stack > * + * {
+  margin-top: 24px;
+}
+
+.stack > .notice + .action-row {
+  margin-top: 12px;
+}
+
+/* ---------- 连接状态独立成行 ---------- */
+
+/* 不再塞进 .kv-list 借它的 10px gap，也不在屏上写 inline margin-top：
+ * 上下 12、左右 0，放进状态卡或内容区都行。 */
+.link-status.is-row {
+  display: flex;
+  margin: 12px 0;
+}

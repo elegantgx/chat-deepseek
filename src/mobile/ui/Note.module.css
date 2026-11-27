@@ -1,0 +1,29 @@
+.note {
+  margin: 24px 0 0 17px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.prep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dot-mute);
+}

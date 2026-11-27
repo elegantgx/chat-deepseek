@@ -1,0 +1,4 @@
+/* 页面级主操作：表单卡下 16，全宽胶囊由 Button 的 block 负责 */
+.save {
+  margin-top: 16px;
+}

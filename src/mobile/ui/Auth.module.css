@@ -1,0 +1,60 @@
+/* 认证页大标题：25/600/32，上距 44，居中（mockup .auth-title） */
+.title {
+  margin: 44px 0 0;
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+/* 服务器胶囊：和输入框同一形状语言，56 / 28 / --fill-2 / 左右 20 */
+.serverChip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 28px;
+  background: var(--fill-2);
+}
+
+.serverIcon {
+  flex: 0 0 auto;
+  color: var(--text);
+}
+
+.serverName {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+/* 连接状态：12.5/16、三级文字，点 6 跟随绿色语义 */
+.serverStatus {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 16px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.offline .dot {
+  background: var(--danger);
+}

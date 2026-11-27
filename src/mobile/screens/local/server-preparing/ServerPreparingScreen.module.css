@@ -1,0 +1,6 @@
+/* 示意的“正在初始化”是基础 44 高（不是主按钮的 48），按截图取 44；
+   颜色仍按 visual §5.1 保留品牌色 45%，不改回灰底。重复一次类名提高优先级，
+   不依赖 CSS Module 的注入顺序。 */
+.initializingButton.initializingButton {
+  height: 44px;
+}

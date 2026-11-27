@@ -1,0 +1,40 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 18px 0 16px;
+  border-radius: 26px;
+  background: var(--fill-2);
+  color: var(--ink-3);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+/* WebView 的 search 输入会自带清除按钮，这里不要，尺寸会变 */
+.input::-webkit-search-cancel-button {
+  display: none;
+}

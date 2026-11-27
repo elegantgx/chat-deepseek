@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <!--
+      渲染层没有环境权限：资产之外不出网，脚本只允许同源。
+      这条 CSP 是 WebView 的第二道防线，第一道是壳只放行 assets。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Deepseek</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

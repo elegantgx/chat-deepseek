@@ -1,0 +1,130 @@
+/* 基座对齐 mockup `.btn`：44 高、12 圆角、15/500；主按钮再长到 48 并加粗 */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.primary {
+  height: 48px;
+  background: var(--brand);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.secondary {
+  background: var(--fill);
+  color: var(--text);
+}
+
+/* 描边按钮：用 inset 阴影而不是 border，尺寸不受 1px 边框影响 */
+.ghost {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+
+/* 红描边按示意写死 40% 红；文字跟随 --danger，暗色自动提亮 */
+.danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(236, 19, 19, 0.4);
+  color: var(--danger);
+}
+
+/* 行内弱按钮（“当前使用中”这类）：填充底 + 三级字，不抢主操作 */
+.quiet {
+  background: var(--fill);
+  color: var(--ink-3);
+}
+
+/* 提示条 / 动作行里的文字按钮：32 高、8 圆角、13/600，形态比主按钮轻一档 */
+.text,
+.textDanger {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  gap: normal;
+}
+
+.textDanger {
+  color: var(--danger);
+}
+
+.page {
+  height: 52px;
+  font-size: 17px;
+}
+
+.sm {
+  height: 44px;
+}
+
+/* 服务器选项卡里的动作按钮：46 高（示意 .server-option .opt-actions .btn） */
+.card {
+  height: 46px;
+}
+
+/* 空态里的动作比页面主按钮小一档（示意 `.empty .btn`），仍是胶囊 */
+.xs {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+/* 附件行里的文字动作：24 高，命中区贴着行（示意 .attach-row .text-btn） */
+.inline {
+  height: 24px;
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+.block {
+  width: 100%;
+  border-radius: 999px;
+}
+
+/* 主按钮禁用保留品牌色：灰底会被看成“这里本来就没有按钮”（visual §5.1）。
+   进行中不算禁用：按钮要保持全色，只把内容换成转圈（示意 .btn.is-loading 不降透明度） */
+.primary:disabled:not(.loading) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 其它变体禁用统一退成弱化底，避免描边/红框还留在页面上 */
+.secondary:disabled:not(.loading),
+.ghost:disabled:not(.loading),
+.danger:disabled:not(.loading),
+.quiet:disabled:not(.loading),
+.text:disabled:not(.loading),
+.textDanger:disabled:not(.loading) {
+  background: var(--fill);
+  box-shadow: none;
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* 进行中不额外降透明度：半透明会和“禁用”混成同一个状态（示意 `.btn.is-loading`） */
+.loading {
+  pointer-events: none;
+}

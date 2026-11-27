@@ -1,0 +1,129 @@
+.preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 26px 18px 0;
+  overflow-y: auto;
+}
+
+.bubble {
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  margin-left: auto;
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: var(--bubble);
+  color: var(--text);
+  font-size: calc(17px * var(--font-scale));
+  line-height: calc(24px * var(--font-scale));
+}
+
+.text {
+  margin: 26px 0 0;
+  color: var(--text);
+  font-size: calc(17px * var(--font-scale));
+  line-height: calc(28px * var(--font-scale));
+}
+
+.panel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 244px;
+  padding: 22px 20px 44px;
+  border-radius: 24px 24px 0 0;
+  background: var(--card);
+}
+
+.panelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.sliderBlock {
+  position: relative;
+  margin-top: auto;
+  padding: 0 2px;
+}
+
+.labels {
+  position: relative;
+  height: 22px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.aSmall {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  font-size: 13.5px;
+  line-height: 18px;
+}
+
+.aLarge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 17.5px;
+  line-height: 20px;
+}
+
+.value {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.range {
+  position: relative;
+  height: 4px;
+  margin: 24px 0 12px;
+  border-radius: 999px;
+  background: var(--track);
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* 轨道只有 4 高，上下各扩 20 的透明命中区，手指才好拖 */
+.range::before {
+  position: absolute;
+  inset: -20px 0;
+  content: '';
+}
+
+.range:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 16px;
+}
+
+.tick {
+  position: absolute;
+  top: 50%;
+  width: 1.5px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--tick);
+  transform: translate(-50%, -50%);
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--pos);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+}

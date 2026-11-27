@@ -1,0 +1,50 @@
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* 未初始化 / 已停止 */
+.idle {
+  background: var(--dot-mute);
+}
+
+/* 准备中 / 连接中 */
+.busy {
+  background: var(--brand);
+}
+
+/* 失败 / 断开 */
+.failed {
+  background: var(--danger);
+}
+
+.text {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+}
+
+.pill {
+  margin-left: auto;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}

@@ -1,0 +1,39 @@
+.avatar {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fill-3);
+  color: var(--ink-3);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 账号管理的大头像：品牌实心 + 白字（示意 .avatar-lg） */
+.lg {
+  width: 72px;
+  height: 72px;
+  background: var(--brand);
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+/* 编辑角标：26 圆、卡片底 + 1px 细边，压在右下角外面一点 */
+.badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--text);
+}

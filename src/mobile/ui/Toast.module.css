@@ -1,0 +1,18 @@
+/* fixed 层：补底部安全区，避免提示压在手势条下面 */
+.toast {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 50;
+  max-width: calc(100% - 36px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+  word-break: break-word;
+  pointer-events: none;
+  transform: translateX(-50%);
+}

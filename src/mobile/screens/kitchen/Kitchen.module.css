@@ -1,0 +1,135 @@
+/* 自查页自己的排版，不改组件样式；色值仍只用 token */
+.intro {
+  padding: 6px 0 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 30px;
+}
+
+.sub {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.meta {
+  margin: 6px 0 0;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.sectionTitle {
+  margin: 0 0 12px 2px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.rowGap {
+  height: 12px;
+}
+
+.serverChipGap {
+  margin-top: 20px;
+}
+
+.stack12 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.note {
+  color: var(--ink-4);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.lineLabel {
+  min-width: 0;
+}
+
+.headerStatus {
+  flex: 0 0 auto;
+}
+
+/* 顶栏/聊天顶栏是满宽组件，测试时抵消 PageBody 的左右 18，不然会被卡片缩窄 */
+.bleedCard {
+  margin: 0 -18px;
+  border-radius: 0;
+}
+
+/* 聊天区临时框：满宽（抵消 PageBody 的左右 18），给气泡和 Composer 真实画布；
+   不让内部再滚，避免把消息文字截在输入区上沿 */
+.chatFrame {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -18px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow:
+    inset 0 1px 0 var(--border),
+    inset 0 -1px 0 var(--border);
+}
+
+.chatScroll {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px 10px;
+}
+
+.chatText {
+  margin: 10px 0;
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 6px;
+}
+
+.iconCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.iconName {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+}

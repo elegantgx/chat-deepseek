@@ -1,0 +1,6 @@
+/* 用户名最长 64 字符：居中显示、允许换行，避免在 390 画布上横向溢出。 */
+.profileName {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}

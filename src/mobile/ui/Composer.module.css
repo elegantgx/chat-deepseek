@@ -1,0 +1,319 @@
+/* 输入卡停靠在页面底部；底部留 6 与示意 .composer-dock 一致，安全区由 Shell 统一留 */
+.dock {
+  flex: 0 0 auto;
+  padding: 0 16px 6px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--bg);
+  box-shadow: var(--shadow-composer);
+}
+
+/* 附件行贴在输入卡上沿之外：每行自己带 margin-bottom 8（示意 .attach-row） */
+.attachments {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 输入行：16/24、上 12；用 textarea 让长内容换行，高度由组件按 scrollHeight 控到 120 */
+.input {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  max-height: 120px;
+  padding: 12px 12px 0 16px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+/* 占位文案用 caption 而不是 ink-4：官方输入卡就是这个弱度 */
+.input::placeholder {
+  color: var(--caption);
+}
+
+.input:disabled {
+  cursor: default;
+}
+
+.functions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px;
+}
+
+.toggles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.right {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tool {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+}
+
+.tool:focus-visible,
+.send:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 发送键：品牌色 34 圆，左距 6；不可用只降 40% 透明度（示意 .send-btn.is-disabled） */
+.send {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.sendDisabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 开关 chip：34 高、18 圆角、1px 描边；图标固定 14 */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.toggle svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.toggleOn {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 底部说明：11/16 --ink-4；有模型/字数时按三段分开，说明始终居中 */
+.caveat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  user-select: none;
+}
+
+.hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  flex: 0 0 auto;
+  overflow: hidden;
+  max-width: 40%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 待发送附件行：--fill-2 底、12 圆角、10 12 内边距（示意 .attach-row） */
+.attachRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.attachIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--ink-3);
+}
+
+.attachMain {
+  min-width: 0;
+  flex: 1;
+}
+
+.attachHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 文件名用正文小字号和主文字色，不退回 12px 的说明色 */
+.attachTitle {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.attachPercent {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.attachNote {
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* 行内动作收到附件行高度，不另造按钮 */
+.attachActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin: -2px -4px -2px 0;
+}
+
+.attachActions button {
+  height: 24px;
+  padding: 0 4px;
+  font-size: 13px;
+}
+
+/* 上传中：4px 细条压在说明下面；轨道换 --line，才能在 --fill-2 底上看见 */
+.attachProgress {
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.attachBar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+
+/* 失败态只换红边与红字，行高不变，输入区不会跟着跳 */
+.attachFailed {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.attachFailed .attachIcon,
+.attachFailed .attachTitle,
+.attachFailed .attachNote,
+.attachFailed .attachActions button {
+  color: var(--danger);
+}
+
+/* 输入区禁用（离线/服务停止）：整卡换 --fill-2，边框收掉，动作一起变淡 */
+.disabled {
+  border-color: transparent;
+  background: var(--fill-2);
+  pointer-events: none;
+}
+
+.disabled .input {
+  color: var(--ink-3);
+}
+
+.disabled .input::placeholder {
+  color: var(--ink-3);
+}
+
+.disabled .toggle {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--ink-4);
+}
+
+.disabled .tool {
+  opacity: 0.4;
+}
+
+.disabled .send {
+  opacity: 0.4;
+}

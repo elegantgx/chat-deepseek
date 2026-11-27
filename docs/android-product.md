@@ -2,13 +2,16 @@
 
 > 本文钉死 Android 端的产品形态与通道分工，避免后续讨论（或上下文压缩后）再次跑偏。
 > 视觉细则见 `docs/android-visual.md`，静态示意在 `docs/android/mockups/`。
-> 当前状态：**只有 UI 设计，没有产品代码**；实现等桌面端稳定后再开。
+> 当前状态：UI 已定稿；36 屏与 20 个状态分支已实现（`src/mobile/`），Kotlin 壳与
+> Go 子进程已接好（`android/`），arm64 debug APK 可由手动 workflow 构建；待真机验收。
+> 工程细节见 `docs/android-architecture.md`。
 
 ## 1. 一句话
 
 Android 是 chat-deepseek 的移动客户端：**主界面是聊天**（对标 DeepSeek 官方 App）；
 **服务器可选**（本机或远程自建服务端）；业务数据一律走 HTTP `/api/v1`，
-本机服务另有一条 **ipc 控制面**（Android 自己的，不复用桌面端的）。
+本机服务另有一条 **ipc 控制面**（同一份 `chat-deepseek ipc`，Android 上跑独立子进程，
+wire 与桌面一致）。界面是打包进 APK 的 mobile Web，由 Kotlin 壳托管。
 **远程服务器只登录 + 聊天，Android 不代管**（管理它要 SSH，App 不封装 SSH）。
 
 ## 2. 服务器模型
@@ -25,8 +28,9 @@ App 里「服务器」是一个明确的可选对象，启动后可以连接、�
 - **本机服务不能当服务端**。Android 的系统限制决定了它只为当前设备服务，不能给浏览器或其它设备访问。
 - **数据面统一 HTTP**：连本机也是 `http://127.0.0.1:<port>`，聊天、会话、附件走同一套 `/api/v1`，
   不因为「本机」就发明另一套业务协议。
-- **ipc 只管本机服务的控制**。它是 Android 自己的一份本地控制面，与桌面端 `ipc`、浏览器 `/api/v1`
-  互不混用；三种通道各管一段，不能煮成一锅粥。
+- **ipc 只管本机服务的控制**。Android 用的是同一份 `chat-deepseek ipc`（wire 与桌面一致），
+  只是跑在独立子进程、由壳独占；它和浏览器 `/api/v1` 互不混用。三种通道各管一段，
+  不能煮成一锅粥。
 - **Android 不代管远程服务器**。改远程服务端的配置、装/停 systemd、管账户、做备份恢复，本质都是
   服务器上的 CLI 操作，要 SSH 才能做；App **不封装 SSH/SFTP**，也不打算做远程运维面板。
   所以远程服务器在 App 里只有三件事：填地址、登录、聊天。运维入口**直接不存在**，
@@ -61,15 +65,22 @@ App 里「服务器」是一个明确的可选对象，启动后可以连接、�
 
 ## 4. 交付形式
 
-- 本轮只做 **纯静态 UI 示意**：每个交互状态一张屏，平铺陈列，供评审；
-  **不做可交互原型**，不写模拟请求、不写产品代码。
-- 之后实现时的工程形态：`mobile/` 放 UI，`android/` 放壳，GitHub Actions 出 apk；
-  与桌面端各自独立，不共享 Electron 代码。
+- UI 示意已定稿（36 屏）；首版实现 **36 屏全上**，不拆批。
+- 工程形态：`src/mobile/` 放 mobile Web（独立 rspack 入口，复用 `src/services` 与
+  消息/Markdown 组件），`android/` 放 Kotlin 壳与构建。界面由 WebView 渲染，壳持有
+  ipc 与 HTTP；业务数据不经过渲染层直连。GitHub Actions 出 **arm64 debug apk**，
+  真机校验；不上商店、不签名发布。
+- 与桌面端各自独立，不共享 Electron 代码。模块边界、桥、子进程与生命周期见
+  `docs/android-architecture.md`（仅 Android，不做 iOS）。
 
 ## 5. 明确不做
 
 - **不做 SSH / SFTP / 远程终端，不做远程服务器的运维面板**。远程服务器在 App 里只有「地址 + 登录 + 聊天」。
+- **iOS 端**：不规划，也不为它预留 KMP / Compose Multiplatform 抽象。
 - Findroid 式「服务器列表 → 媒体库」为主的产品结构。
 - 把桌面四页（服务 / 账户 / 备份 / 设置）抬成底部 tab 或与聊天平级。
 - 远程与本机不区分的「无差别服务器」列表——本机有独立状态与控制能力，远程没有。
 - 为 Android 另起一套业务协议；业务只走 HTTP `/api/v1`。
+- **不做 Compose 原生重写**：界面是打包进 APK 的 mobile Web，壳只做宿主与能力。
+- **不把 mobile Web 交给服务端托管**：UI 版本会跟服务器版本绑死，旧远程会显示旧界面。
+  打包进 APK 就是「只给 Android 用」的唯一做法，不需要 UA 门禁。

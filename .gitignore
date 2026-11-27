@@ -29,3 +29,17 @@ coverage.out
 # Release staging (CI assembles artifacts here)
 /release/
 /*.spec
+
+# Android：工程在 android/，不提交 Gradle wrapper（CI 用 setup-gradle 固定 8.10.2）
+/android/.gradle/
+/android/.kotlin/
+/android/build/
+/android/app/build/
+/android/local.properties
+# Go 交叉编译产物由 :app:buildGoArm64 现场生成，不进版本库
+/android/app/src/main/jniLibs/
+# mobile Web 构建产物（只进 APK assets，浏览器包仍是 dist/），不提交
+/dist-mobile/
+
+# 本地 Android SDK（sdkmanager 装在这里，不进版本库）
+/.android-sdk/

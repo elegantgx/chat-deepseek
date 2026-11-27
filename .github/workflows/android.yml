@@ -1,0 +1,134 @@
+name: Android debug APK
+
+# 与桌面端发布一致，只手动触发：产物是给真机验收的，自动跑没有意义。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 手动连点两次时，让后一次把前一次取消，避免两个构建抢同一个 artifact 名字。
+  group: android-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  build-debug-apk:
+    name: Build arm64 debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # 版本以 go.mod 为准，避免 workflow 与本地 Go 版本漂移。
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.23.0
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build mobile web
+        # APK 里的 assets 来自 dist-mobile/，不构建就只有 Gradle 生成的兜底页，
+        # 装到手机上会看到一个「这不是 App」的空白页。所以这一步是必须的，不是可选优化。
+        run: pnpm build:mobile
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        # setup-android 通常已经接受过；这里再跑一次兜底。sdkmanager --licenses 在无输入
+        # 环境下会反复询问，yes 被 SIGPIPE 掉是正常的，不能因此让整条流水线失败。
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Install Android SDK packages
+        # AGP 8.7.3 需要 compileSdk 35 对应的 platform，build-tools 固定到 35.0.0，
+        # 不依赖 runner 镜像里恰好预装了什么版本。
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        # 仓库不提交 wrapper：这里下载固定的 8.10.2 并放进 PATH，同时缓存 Gradle 用户目录。
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+          cache-read-only: false
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug --no-daemon --stacktrace
+          mkdir -p ../dist
+          cp app/build/outputs/apk/debug/app-debug.apk ../dist/app-debug.apk
+          # 关键断言：Go 二进制必须真的以 native lib 形式进包。打包规则被 AGP 悄悄改掉时，
+          # 这里会直接失败，而不是等用户装到真机才发现 nativeLibraryDir 是空的。
+          unzip -l ../dist/app-debug.apk | grep 'lib/arm64-v8a/libchatd.so'
+          ls -lh ../dist/app-debug.apk
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-deepseek-android-arm64-debug
+          path: dist/app-debug.apk
+          if-no-files-found: error
+
+  visual-check:
+    name: Screenshot diff (mockup vs implementation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.23.0
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install CJK fonts
+        # 缺中文字体时示意和实现会一起变方框，diff 可能仍然是绿色，但人看不了。
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk
+
+      - name: Build mobile web
+        run: pnpm build:mobile
+
+      - name: Diff screenshots against mockups
+        # 不锁 Chrome：示意和实现在同一次运行里用同一个二进制，版本漂移自动抵消。
+        run: node scripts/shots.mjs --max-diff=0.5
+
+      - name: Upload screenshot report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-screenshot-report
+          path: |
+            tmp/shots/report.json
+            tmp/shots/pairs
+          if-no-files-found: warn

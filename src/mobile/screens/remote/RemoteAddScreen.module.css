@@ -1,0 +1,10 @@
+/* 14 / 15：表单卡 + 主按钮 + 「需要准备」。间距取自 mockup.css 的 .form-content。 */
+
+.submit {
+  margin-top: 16px;
+}
+
+/* 证书 / 切换失败是整块提示，不进字段错误；与上一张卡留 28 */
+.noticeGroup {
+  margin-top: 28px;
+}

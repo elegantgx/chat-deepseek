@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用名会被安装器与任务切换器显示；spike 包也用正式名字，避免用户装错后分不清。 -->
+    <string name="app_name">Chat DeepSeek</string>
+</resources>

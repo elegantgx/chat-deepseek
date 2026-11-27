@@ -1,0 +1,83 @@
+.block {
+  margin-top: 16px;
+}
+
+.tight {
+  margin-top: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 百分比是“值”：等宽 + 主文字色，和左边说明拉开层次 */
+.value {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill);
+}
+
+.bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+
+/* 不知道总进度：整条斜纹向右滚。平移量 28.3px = 一个水平周期（20 / cos45°），循环无缝 */
+.indeterminate .bar {
+  width: 100%;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--brand) 0 10px,
+    var(--brand-line) 10px 20px
+  );
+  animation: progress-stripes 0.9s linear infinite;
+}
+
+@keyframes progress-stripes {
+  to {
+    background-position: 28.3px 0;
+  }
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* 截图/省电：条纹停在原位，尺寸不变，产物可复现 */
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate .bar {
+    animation: none;
+  }
+}

@@ -1,0 +1,79 @@
+.bar {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  height: 56px;
+  padding: 0 18px;
+}
+
+.back {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chip-fill);
+  color: var(--text);
+}
+
+.back svg {
+  display: block;
+}
+
+.back:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: default;
+}
+
+.title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 34px;
+}
+
+/* 聊天顶栏：比二级页顶栏高 4，且左右只留 10（示意 .chat-header） */
+.chatBar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 60px;
+  padding: 12px 10px 4px;
+}
+
+.chatTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0 8px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+/* 聊天顶栏右侧动作组：多个图标之间 6（示意 .bar-actions） */
+.chatActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}

@@ -1,0 +1,64 @@
+.page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--group-bg);
+  color: var(--text);
+}
+
+.bg {
+  background: var(--bg);
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 设置页：内容区 padding 2 18 0（visual §4） */
+.settings {
+  padding: 2px 18px 0;
+}
+
+/* 本机/远程详情、表单、服务器选择：顶部多 2px */
+.server {
+  padding: 4px 18px 0;
+}
+
+/* 认证页：左右 36 */
+.auth {
+  padding: 0 36px;
+}
+
+/* 远程登录：左右 18 */
+.login {
+  padding: 0 18px;
+}
+
+.none {
+  padding: 0;
+}
+
+.footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 12px 24px;
+  color: var(--ink-4);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.version {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}

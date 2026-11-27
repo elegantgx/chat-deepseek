@@ -1,0 +1,7 @@
+/* 添加账户表单：字段与角色卡之间用 Card gap=28，按钮再用 shared.submitSpaced 的 28。 */
+.form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}

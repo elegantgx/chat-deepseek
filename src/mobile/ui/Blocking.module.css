@@ -1,0 +1,39 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  padding: env(safe-area-inset-top, 0px) 36px env(safe-area-inset-bottom, 0px);
+  place-items: center;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.card {
+  width: 100%;
+  max-width: 300px;
+  padding: 24px 20px;
+  border-radius: 20px;
+  background: var(--card);
+  text-align: center;
+}
+
+.icon {
+  display: flex;
+  justify-content: center;
+  color: var(--brand);
+}
+
+.title {
+  margin: 14px 0 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 18px;
+}
