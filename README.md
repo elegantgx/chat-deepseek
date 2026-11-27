@@ -4,7 +4,29 @@
 
 本项目是 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo) 的 fork，当前版本 `0.1.5-official0.1.4`，代码基线为上游 `v0.1.4`。仓库位于 [GitHub](https://github.com/elegantgx/chat-deepseek)，变更记录见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 运行
+## 下载与安装
+
+发布页同时提供服务端（headless，用浏览器访问）和 Electron 桌面端。服务端压缩包三平台都有；桌面端只提供对应平台的安装包。
+
+### Linux
+
+- **服务端**：下载 `chat-deepseek-<版本>-linux-amd64.zip`，解压后运行 `./chat-deepseek`。首次启动会引导创建 Owner，之后在浏览器打开 `http://127.0.0.1:8090`。
+- **桌面端**：下载 `chat-deepseek-desktop-<版本>-linux-x86_64.tar.gz`，解压后运行目录里的 `chat-deepseek`，不需要安装。桌面端自带 Go 后端（`resources/bin/chat-deepseek`），数据默认在 `~/.config/chat-deepseek/data`。
+- systemd 是**可选的高级功能**：不安装也能用前台进程、tmux、nohup 或其它 supervisor；需要开机自启时再执行 `./chat-deepseek service install --enable`，详见[常驻运行](#常驻运行)。
+
+### macOS
+
+- **服务端**：`chat-deepseek-<版本>-macos-arm64.zip`，解压后运行 `./chat-deepseek`（仅 Apple Silicon）。
+- **桌面端**：`chat-deepseek-desktop-<版本>-macos-arm64.dmg`，打开后把 `chat-deepseek` 拖进「应用程序」。当前**未签名、未公证**：首次打开请在 Finder 里右键应用 →「打开」，再确认「打开」；或先执行 `xattr -cr /Applications/chat-deepseek.app`。只提供 arm64。
+
+### Windows
+
+- **服务端**：`chat-deepseek-<版本>-windows-amd64.zip`，解压后运行 `chat-deepseek.exe`。
+- **桌面端**：`chat-deepseek-desktop-<版本>-windows-x64.exe` 是 NSIS 安装包，双击安装，可选择安装目录并创建开始菜单/桌面快捷方式。安装包未签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
+
+桌面端和浏览器访问的是同一套本机服务：桌面端在后台启动 `chat-deepseek ipc` 并只监听回环，聊天界面在桌面窗口里；服务端压缩包则适合服务器、NAS 或只用浏览器的场景。
+
+## 从源码运行
 
 需要 Node.js 22.12+、pnpm、Go 1.27+。先构建前端并把产物嵌入二进制：
 
@@ -42,90 +64,43 @@ CGO_ENABLED=0 go build -o chat-deepseek ./cmd/chat-deepseek
 
 ## 命令行
 
-| 命令 | 作用 |
-| --- | --- |
-| `setup` | 创建第一个 `Owner`，只能执行一次 |
-| `serve` | 前台启动服务（会话模式），`Ctrl+C` 停止 |
-| `info` | 输出版本、路径、配置和 systemd 状态（固定 `key=value`） |
-| `config set` | 修改 `config.json`：`listen`、`public_url`、`api_origin`、`backup_dir` |
-| `service ...` | Linux systemd 托管：`install` / `uninstall` / `start` / `stop` / `restart` / `status` |
-| `login` / `logout` / `whoami` | CLI 管理登录，按终端隔离，固定 15 分钟过期 |
-| `user ...` | 创建、禁用、授组、重置密码、删除账户 |
-| `backup ...` | 备份、列出备份、恢复备份 |
-| `version` | 版本信息 |
+| 命令                          | 作用                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `setup`                       | 创建第一个 `Owner`，只能执行一次                                                      |
+| `serve`                       | 前台启动服务（会话模式），`Ctrl+C` 停止                                               |
+| `info`                        | 输出版本、路径、配置和 systemd 状态（固定 `key=value`）                               |
+| `config set`                  | 修改 `config.json`：`listen`、`public_url`、`api_origin`、`backup_dir`                |
+| `service ...`                 | Linux systemd 托管：`install` / `uninstall` / `start` / `stop` / `restart` / `status` |
+| `login` / `logout` / `whoami` | CLI 管理登录，按终端隔离，固定 15 分钟过期                                            |
+| `user ...`                    | 创建、禁用、授组、重置密码、删除账户                                                  |
+| `backup ...`                  | 备份、列出备份、恢复备份                                                              |
+| `version`                     | 版本信息                                                                              |
 
 - `info`、`config set`、`service` 不需要应用登录；`service install` 仍要求数据目录已初始化。`info` 只读，不会创建数据库、`config.json` 或 WAL 文件。
 - `config set` 只修改指定字段，保留 `config.json` 里的其他字段，文件仍然是 `0600`。修改 `listen`、`public_url`、`api_origin` 后需要重启 `serve`，`backup_dir` 在下次备份时生效。
 - 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` 未登录或登录过期、`4` 权限不足。
-- `user list`、`whoami`、`backup list`、`info`、`service status` 的文本列是稳定契约；GUI 和脚本依赖这些格式，改动需要同步 `gui/parsing.py`。
-
-## 图形界面（可选）
-
-`gui/app.py` 是 Python + PySide6（Qt 6）管理界面的薄入口，界面逻辑在 `gui/cdgui/`：按钮只负责拼出 `chat-deepseek` 子命令，输出由 `gui/parsing.py` 解析成账户列表、服务状态和提示；已知失败会翻译成可操作说明，识别不了才显示原始输出。账户、会话、备份逻辑仍全部在 `chat-deepseek` 里，不另写一套。它覆盖 `setup`、`serve`、`backup`、`user ...`、`login` / `logout` / `whoami`、`version` 和 `help`，并通过 `info` / `config set` / `service` 显示服务端配置、保存设置和管理 systemd 服务。聊天仍由 `serve` 提供的现有 Web UI 完成。
-
-窗口左侧是四页导航：服务 / 账户 / 备份 / 设置。服务页把主操作（启动/停止，未初始化时为创建 Owner）、重启、打开页面和 `⋯` 溢出菜单（安装/更新/卸载服务、命令行帮助）分开；备份独立成页，服务运行时会先提示“备份需要先停止服务”，停止操作单独二次确认；设置从弹窗改成页面，连接卡和服务端配置卡各自保存，另有管理登录和关于卡；账户页支持 `↑`/`↓`、空格和 `Enter` 键盘操作。未登录时账户和备份的导航徽标显示 `—`，登录后显示数量；服务项显示运行状态点。
-
-设置里的“连接方式”可以选择本机或 SSH 远程。SSH 模式使用系统 `ssh`，只支持密钥/agent 认证（先在终端执行一次 `ssh <主机>` 确认可以直接登录），并在 GUI 启动后保持一个 `ssh -T <主机> 'exec /bin/sh'` 常驻通道，所有 CLI 命令都在这个 shell 里执行；CLI 的登录态按 shell 保存，所以登录一次后其余管理命令共享同一个登录态。远端二进制目录必填，远端数据目录留空表示用远端 CLI 默认值；GUI 不做端口映射，打开页面需要远端配置 Public URL，也不提供 SFTP。
-
-依赖装在 `gui/.venv`（已 gitignore）。在仓库根目录：
-
-```sh
-python3 -m venv gui/.venv
-gui/.venv/bin/pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r gui/requirements.txt
-gui/.venv/bin/python gui/app.py
-```
-
-Windows 用 `gui\.venv\Scripts\python gui\app.py`；更完整的命令见 [gui/README.md](gui/README.md)。需要 Python 3.10+ 和 `requirements.txt` 里的 PySide6。Linux 还缺 Qt 的 xcb 运行库时，Debian/Ubuntu 可安装 `libxcb-cursor0`、`libxkbcommon-x11-0`、`libgl1`、`libegl1` 等系统包。
-
-`gui/app.py` 默认使用 `chat-deepseek` 二进制所在目录（仓库根目录），也可以在设置页改。GUI 本地配置是平台用户配置目录的 `config.gui.json`（v3，旧版会自动迁移）：Linux 是 `~/.config/chat-deepseek/`，macOS 是 `~/Library/Application Support/chat-deepseek/`，Windows 是 `%APPDATA%\chat-deepseek\`；里面保存连接方式、`local` 与 `ssh` 两段路径和上次登录的用户名。监听地址、Public URL、API 地址和备份地址通过 `chat-deepseek config set` 写入当前目标数据目录的 `config.json`，`serve` 启动时直接读取；设置页的“应用切换”和“保存配置”分别保存连接与服务端配置；监听地址、Public URL、API 地址保存后重启服务生效，备份地址在下次备份时生效。密码通过 `--password-stdin` 从 GUI 传给子进程，不出现在命令行参数或输出日志里；上次登录的用户名记在 `config.gui.json`，不保存密码。
-
-Linux + systemd 时，服务页显示 systemd 服务的安装位置（用户目录）、运行、开机自启和 linger 状态，可以启动、停止、重启、安装、更新和卸载。安装对话框用下拉框选择“用户目录”或“系统目录”：用户目录直接安装，不需要 root；系统目录需要 root，GUI 不执行安装，只给出“安装命令”和“CLI 帮助”两条单行字段，各自带复制按钮；单行显示不下时中间省略，复制的是完整命令。安装后在终端运行 CLI 帮助查看启动、停止、重启和卸载命令。用户级安装本身只写 unit 并 `daemon-reload`；未开启 linger 时注销后服务会停止，对话框按当前状态提供 `loginctl enable-linger` 或 `loginctl disable-linger` 命令的复制按钮；“更新服务”按当前配置重写 unit（`--force`）并重启服务，可以同时调整开机自启。未安装服务时“启动服务”走前台会话模式，关闭窗口会停止该进程；已安装的 systemd 服务不会被关闭窗口停止。Windows/macOS 没有 systemd，继续使用会话模式，常驻交给任务计划程序/NSSM 或 LaunchAgent。GUI 依赖 CLI 的参数名、退出码和中文输出；CLI 文案或表格格式变化时需要同步改 `gui/parsing.py`。Windows 上停止会话进程是强制结束；同一个数据目录同时只能有一个服务实例。无图形桌面的服务器继续直接用 CLI，GUI 不是运行必需组件。
-
-SSH 模式下列表和服务命令都在远端执行，systemd 状态来自远端 `info`。远端用户级 systemd 服务同样需要 linger：SSH 通道断开后没有 linger 的 user manager 会被 logind 停掉，服务也跟着停止；常驻场景应开启 linger，或在远端安装系统级 unit。远端前台 `serve` 会随 GUI 关闭或 SSH 断开结束，点“停止服务”会按远端 PID 结束进程并释放端口。备份地址、监听地址、Public URL 和 API 地址都按当前主机自己的 `config.json` 读取，切换主机不会沿用上一台的值。远端路径不在本机，`备份到…` 隐藏；GUI 只在远端配置了 Public URL 时才能打开页面。
-
-GUI 使用 CLI 的登录态：不登录也能启停、安装、更新服务和改设置，账户页和备份页显示锁图标与登录入口；点击登录、刷新、添加或备份会弹出登录框。只有 Admin 和 Owner 能登录，按钮会按当前身份置灰不可执行的操作；Admin 不能授组、备份或操作 Owner，Owner 也不能禁用/删除自己。登录 15 分钟后过期，关闭 GUI 会自动退出登录。SSH 模式下登录态绑定常驻通道，关闭窗口会先 `logout` 再断开；切换连接方式、主机或数据目录后需要重新登录。
+- `user list`、`whoami`、`backup list`、`info`、`service status` 的文本列是稳定契约；脚本依赖这些格式，改动要同步使用方。
 
 ## 发布流水线
 
-`.github/workflows/release-{linux,windows,macos}.yml` 是三个手动触发的 GitHub Actions 工作流：在 Actions 里选择 Release Linux、Release Windows 或 Release macOS，点击 Run workflow；push、标签、Pull Request 和定时任务都不会自动触发。
+`.github/workflows/release-{linux,macos,windows}.yml` 是三个手动触发的 GitHub Actions 工作流：在 Actions 里选择 Release Linux、Release macOS 或 Release Windows，点击 Run workflow；push、标签、Pull Request 和定时任务都不会自动触发。在 tag 上运行会把产物发到同一个 GitHub Release，在分支上运行只保留 Actions artifacts（30 天）。
 
-每个工作流都在自己的 runner 上完整执行 Web 构建、Go CLI 编译和 ZIP 生成；Windows 和 macOS 还会构建 PyInstaller GUI。最后得到：
+每个工作流都跑同样的门禁：`pnpm install --frozen-lockfile --allow-build '!electron-winstaller'` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）；然后用 `CGO_ENABLED=0` 构建同一份 Go 二进制（服务端发布包与桌面端 `resources/bin` 复用），`pnpm desktop:build` 编译主进程与渲染层，最后由 electron-builder 出安装包。
 
-```text
-chat-deepseek-<版本>-linux-amd64.zip
-chat-deepseek-<版本>-windows-amd64.zip
-chat-deepseek-<版本>-macos-arm64.zip
-```
+产物矩阵：
 
-版本取自 tag 名；在分支上手动运行时使用提交的 SHA。Linux ZIP 根目录：
+| 平台    | 服务端（headless）                       | 桌面端                                             |
+| ------- | ---------------------------------------- | -------------------------------------------------- |
+| Linux   | `chat-deepseek-<版本>-linux-amd64.zip`   | `chat-deepseek-desktop-<版本>-linux-x86_64.tar.gz` |
+| macOS   | `chat-deepseek-<版本>-macos-arm64.zip`   | `chat-deepseek-desktop-<版本>-macos-arm64.dmg`     |
+| Windows | `chat-deepseek-<版本>-windows-amd64.zip` | `chat-deepseek-desktop-<版本>-windows-x64.exe`     |
 
-```text
-chat-deepseek
-gui/                 GUI 源码
-src/                 完整项目源码（内部保留前端 src/src/）
-README.md
-LICENSE
-THIRD_PARTY_NOTICES.md
-```
-
-Windows ZIP 根目录还包含预编译 GUI `chat-deepseek-gui.exe`，`src/` 同样是完整项目源码。
-
-macOS ZIP 只包含一个 DMG：
-
-```text
-chat-deepseek-<版本>-macos-arm64.zip
-  chat-deepseek-<版本>-macos-arm64.dmg
-```
-
-DMG 内只有 `chat-deepseek-gui.app` 和指向 `/Applications` 的链接；CLI、`config.gui.json` 和三份文档都在 `.app/Contents/Resources` 里。把 `.app` 拖到 Applications 即可；`config.gui.json` 使用 v2 结构，把 `local.data_dir` 指到 `~/Library/Application Support/chat-deepseek/data`；`backup_dir` 由首次运行后的 `info` / `config set` 管理。`.app` 内的副本作为首次启动的模板，真正的用户配置仍写这个标准目录。macOS 包不再附带源码。
-
-Linux 不附带预编译 GUI。PyInstaller onefile 会绑定构建机的 glibc，无法同时覆盖 Ubuntu、Fedora 等不同版本；`gui/` 是可直接构建的 GUI 源码，按 [gui/README.md](gui/README.md) 在解压目录创建 venv、安装 PySide6，再运行 `gui/.venv/bin/python gui/app.py`。CLI 是静态二进制，可以直接使用。`gui/` 是完整源码中 `src/gui/` 的副本，方便解压后直接编辑；不使用符号链接。
-
-- Linux 使用 `ubuntu-latest`，只构建 CLI 并打包源码；Windows 使用 `windows-latest`，构建 CLI 和 GUI；macOS 使用 `macos-latest`（arm64），构建 `.app`、DMG 和只含 DMG 的 ZIP。
-- 在 tag 上运行会把 ZIP 上传到对应的 GitHub Release；在分支上运行只保留 Actions artifacts。
-- 三个 workflow 可以并行；发布步骤会对同一 tag 的 Release 创建和上传做重试，避免同时创建时的竞态。
-- Windows EXE 和 macOS `.app` 使用鲸鱼应用图标；Linux 从源码构建 GUI 时由程序设置窗口/任务栏图标。
-- macOS 包只做 ad-hoc 签名，没有开发者签名/公证，首次打开可能需要在 Finder 右键“打开”，或执行 `xattr -cr`。Windows 包也未签名，可能出现 SmartScreen 提示。
+- 版本取自 tag 名；在分支上手动运行时使用提交的 SHA。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本。
+- Linux 只出 tar.gz 便携包（不出 AppImage/deb）；macOS 只出未签名 dmg；Windows 只出 NSIS 安装包。命名带平台与架构，配置见 `electron-builder.yml`。
+- 服务端 ZIP 只含二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不再附带 GUI 源码或整份 `src/`。
+- 桌面端把 Go 二进制放在 `resources/bin/`；主进程在打包态从 `process.resourcesPath` 解析，开发态仍先看 `CHAT_DEEPSEEK_BIN`，否则用仓库根目录的 `chat-deepseek`。
+- 三份 workflow 可以并行；发布步骤对同一 tag 的 Release 创建和上传做 6 次重试，避免同时创建时的竞态。
+- macOS 包未签名，首次打开按住 Control 点按应用 →「打开」，或执行 `xattr -cr`；Windows 安装包未签名，可能出现 SmartScreen 提示。
 
 ## 命令行登录
 
@@ -139,18 +114,18 @@ Linux 不附带预编译 GUI。PyInstaller onefile 会绑定构建机的 glibc�
 
 - 只有 `Admin` / `Owner` 能登录；普通 `User` 没有 CLI 管理权限。
 - `logout` 只退出当前终端，其他终端不受影响。
-- 未登录或登录过期时退出码为 `3`，权限不足为 `4`，便于脚本和 GUI 判断；完整退出码见上面的命令行一节。
+- 未登录或登录过期时退出码为 `3`，权限不足为 `4`，便于脚本判断；完整退出码见上面的命令行一节。
 - 登录态不写进 `data/`：Linux 在 `$XDG_RUNTIME_DIR/chat-deepseek/sessions/`（tmpfs），macOS 在 `$TMPDIR/chat-deepseek/sessions/`，Windows 在 `%LOCALAPPDATA%\chat-deepseek\run\sessions\`；数据库只保存 token 的 SHA-256。
 - 非交互场景用 `--password-stdin`，密码不会出现在命令行参数里。
 
 权限：
 
-| 操作 | 需要 |
-| --- | --- |
-| `setup`、`serve`、`version` | 不需要登录；`setup` 只能执行一次 |
-| `login`、`logout`、`whoami` | — |
-| `user list`、`user groups`、创建普通 User、管理普通 User | Admin 或 Owner |
-| `user grant` / `user revoke`、操作 Admin/Owner、`backup` 创建/列表/恢复 | Owner |
+| 操作                                                                    | 需要                             |
+| ----------------------------------------------------------------------- | -------------------------------- |
+| `setup`、`serve`、`version`                                             | 不需要登录；`setup` 只能执行一次 |
+| `login`、`logout`、`whoami`                                             | —                                |
+| `user list`、`user groups`、创建普通 User、管理普通 User                | Admin 或 Owner                   |
+| `user grant` / `user revoke`、操作 Admin/Owner、`backup` 创建/列表/恢复 | Owner                            |
 
 能登录服务器的人本来就能直接读写 `chat.db` 和 `master.key`，所以 CLI 登录不是防入侵边界；它是管理规范：让授权、归属和危险操作有据可查，同时避免直接改库绕过最后一名 Owner、会话吊销等代码里的不变量。空数据目录上的首次 `backup restore` 是引导路径，不需要登录；已有实例上恢复必须由 Owner 执行。
 
@@ -221,7 +196,7 @@ API Key 使用 AES-256-GCM 加密后写入 SQLite，`master.key` 单独保存；
 
 ZIP 内容相对于数据目录：`config.json`、`chat.db`、`master.key`、`files/`，不会把 `backups/` 或自定义备份目录打进去。
 
-`backup restore` 会用备份覆盖这四项；备份里没有的项会被删除，以回到备份时的状态。恢复时会保留 `backups/`。交互式终端会要求输入 `yes` 确认；脚本或 GUI 使用 `--yes`。恢复完成后需要重新启动服务。
+`backup restore` 会用备份覆盖这四项；备份里没有的项会被删除，以回到备份时的状态。恢复时会保留 `backups/`。交互式终端会要求输入 `yes` 确认；脚本使用 `--yes`。恢复完成后需要重新启动服务。
 
 `config.json` 也会进入备份 ZIP，所以恢复会连 `backup_dir` 一起恢复到备份时的值。换机器或原路径不存在时，恢复后需要重新 `config set backup_dir`（或每次加 `--backup-dir`），否则下次备份会写到旧地址。
 
@@ -247,7 +222,8 @@ sudo ./chat-deepseek service install --system --run-as chat --data-dir /srv/chat
 sudo ./chat-deepseek service start --system
 ```
 
-  服务不会以 root 运行；`--run-as` 也可以用 `SUDO_USER` 推断，但 `--data-dir` 必须显式给出。同时存在用户级 unit 时不要同时启动，两者会争抢同一端口。
+服务不会以 root 运行；`--run-as` 也可以用 `SUDO_USER` 推断，但 `--data-dir` 必须显式给出。同时存在用户级 unit 时不要同时启动，两者会争抢同一端口。
+
 - `service stop` / `restart` / `status` / `uninstall` 都支持 `--system`；`uninstall` 会停止、取消自启并删除 unit，不会删除数据。
 - 日志交给 journald：`journalctl --user -u chat-deepseek`（用户级）或 `sudo journalctl -u chat-deepseek`（系统级）。
 - 只有 Linux + systemd 支持 `service`。Windows 用任务计划程序或 NSSM 托管 `chat-deepseek serve`；macOS 用 LaunchAgent；Linux 没有 systemd 时用 tmux、nohup 或 NAS 自带的任务计划。
@@ -277,17 +253,21 @@ pnpm dev
 
 打开 http://localhost:8090 。修改前端后热更新；修改 Go 后重启服务。生产构建用 `pnpm build`：构建到 `dist/` 后自动复制到 `internal/webui/dist/`，再由 `go:embed` 嵌进二进制。
 
-| 命令                 | 用途                               |
-| -------------------- | ---------------------------------- |
-| `pnpm dev`           | 启动前端开发服务器                 |
-| `pnpm build`         | 构建前端并复制到 Go 嵌入目录       |
-| `pnpm type`          | TypeScript 类型检查                |
-| `pnpm lint`          | oxlint 检查                        |
-| `pnpm format`        | oxfmt 格式化                       |
-| `go test ./...`      | Go 单元/接口测试                   |
-| `go vet ./...`       | Go 静态检查                        |
+| 命令                   | 用途                         |
+| ---------------------- | ---------------------------- |
+| `pnpm dev`             | 启动前端开发服务器           |
+| `pnpm build`           | 构建前端并复制到 Go 嵌入目录 |
+| `pnpm type`            | TypeScript 类型检查          |
+| `pnpm lint`            | oxlint 检查                  |
+| `pnpm format`          | oxfmt 格式化                 |
+| `go test ./...`        | Go 单元/接口测试             |
+| `go vet ./...`         | Go 静态检查                  |
+| `pnpm desktop:build`   | 编译 Electron 主进程与渲染层 |
+| `pnpm desktop:backend` | 构建随桌面端分发的 Go 后端   |
 
 技术栈以 Go、SQLite（纯 Go 驱动）、React 18、TypeScript、rspack、zustand 为主；Markdown 使用 mdast 渲染，公式与图表按需加载 KaTeX / Mermaid。
+
+桌面端构建、三平台打包与本机 `--smoke` 验收见 [desktop/README.md](desktop/README.md)。
 
 ```text
 cmd/chat-deepseek/    Go CLI 入口
@@ -307,6 +287,7 @@ src/                  React 客户端
 - 从静态前端改为 Go 服务端 + Web 客户端；`file://` 直接打开不再受支持，必须通过服务端访问。
 - 账户、会话、附件、设置和 API Key 移到服务端；不再使用浏览器本地存储。
 - 增加 CLI 账户管理、登录/CSRF、服务端文件代理和 SSE 代理。
+- 新增 Electron 桌面端（`desktop/`，Windows/macOS/Linux 安装包），经本机 `ipc` 管理服务；浏览器仍只走 `/api/v1`。
 - 界面品牌改为 `Deepseek`，字标使用 DM Sans；侧边栏与登录页使用 DeepSeek 鲸鱼标志，登录页跟随明暗主题（亮色白底 / 暗色官方风格）。来源与商标说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 - `main` 只镜像上游，日常改造在 `feature/*` 分支进行；分支、版本与协作约定见 [AGENTS.md](AGENTS.md)。
 

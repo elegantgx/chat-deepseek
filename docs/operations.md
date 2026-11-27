@@ -22,9 +22,7 @@ go run ./cmd/chat-deepseek serve --data-dir ./data-dev --listen 127.0.0.1:8091 -
 pnpm dev
 ```
 
-GUI：`gui/.venv/bin/python -m unittest discover -s gui/tests`；`gui/.venv` 不提交，依赖从清华源安装。
-
-> 前端没有自动化测试；Go 与 GUI 有测试。新增前端测试框架前先与用户确认。
+> 前端与桌面端渲染层没有自动化测试；Go 有测试。新增前端测试框架前先与用户确认。
 
 ## 2. 前端手动冒烟
 
@@ -38,7 +36,7 @@ GUI：`gui/.venv/bin/python -m unittest discover -s gui/tests`；`gui/.venv` 不
 6. 移动端布局（<768px）、键盘弹出；历史导入导出、删除全部会话。
 7. 生产二进制：`pnpm build` 后 `go build -o chat-deepseek ./cmd/chat-deepseek`，访问 `/` 能看到 UI 与静态资源。
 
-## 3. CLI / GUI 验收
+## 3. CLI 与桌面端验收
 
 ### 3.1 备份
 
@@ -58,34 +56,24 @@ GUI：`gui/.venv/bin/python -m unittest discover -s gui/tests`；`gui/.venv` 不
 - `config set`：四个 key 正常写入并提示生效时机；未知字段保留；文件 0600；非法值退出 2；`backup_dir` 清空回默认；损坏的 `config.json` 不被覆盖。
 - `service`：用临时 `XDG_CONFIG_HOME` + fake `systemctl`/`loginctl`（临时 PATH）验证 user/system unit 内容、未初始化拒绝安装、install 不启动、`--enable`/`--disable`、`--force`、linger 提示、status 解析、不支持平台行为。**不要真的写 `~/.config/systemd/user` 或 `/etc/systemd/system`。**
 
-### 3.4 GUI 基本流程
+### 3.4 Electron 桌面端（`--smoke`）
 
-用临时 `XDG_CONFIG_HOME` 和数据目录启动：四页可切换；未登录时徽标为 `—`、账户/备份页显示锁态与登录入口；Owner 登录后账户页键盘可用（`↑`/`↓`/空格/`Enter`），添加/重置密码/授组/撤组/禁用/启用/删除可用；Admin 登录后授组、备份、操作 Owner 置灰，只能管理 User、不能禁用/删除自己。备份页在服务运行时提示先停机且停止需二次确认，停止后“立即备份”生成 ZIP，恢复确认复述覆盖范围。设置页连接卡“测试连接/应用切换”可用，服务端配置卡逐项保存后 `config.json` 与 `info` 一致，带未应用改动离开先确认；服务页 `⋯` 有安装/更新/卸载与命令行帮助。关闭 GUI 后会话文件消失；确认密码不出现在命令行与输出。
-
-### 3.5 GUI 配置迁移与服务安装
-
-- v1/v2 `config.gui.json` 启动后变 v3（`local` + `ssh`），旧 `backup_dir` 写进 `config.json`。
-- fake `systemctl`/`loginctl` 下走“安装服务”：切到系统目录只出现“安装命令”和“CLI 帮助”两条单行字段与复制按钮，命令含 `sudo ... service install --system --run-as <user>`，不执行；切回用户目录安装，确认 `--enable`、`start` 调用与 linger enable/disable；再走更新（可调开机自启、`--force` + `restart`、缓存过期也真正重启、失败弹错误）、停止、重启、卸载；确认关闭 GUI 不停止 systemd 服务。
-
-### 3.6 GUI SSH
-
-- 临时 `XDG_CONFIG_HOME` + fake `ssh`（`exec /bin/sh -c "$last"`）+ fake 远端 `chat-deepseek`；`connection=ssh`、`ssh.host` 为 fake 别名、`ssh.binary_dir` 指向 fake 目录。
-- 无头 Qt 确认：`info` 回填远端 data_dir、版本标签带 SSH 主机、`remote_user` 取自 `id -un`。
-- 设置页切到 SSH 后“应用切换”：两套路径行按方式显隐，与服务端配置卡同页不重叠。
-- login/whoami/logout：密码经 here-doc、登录态跨命令复用、关闭后远端会话文件消失；fake ssh 断开/sleep 时返回 255、提示重新登录、下一条命令重连。
-- SSH 模式启动服务再停止：远端进程退出、端口释放（`ssh -T` 不发 SIGHUP，只杀本地 ssh 会留孤儿进程）；备份页隐藏“备份到…”，打开页面只认远端 Public URL。
-- 备份地址来自远端 `config.json`，刚连上、`info` 未返回时不显示本机路径；服务端四项保存后重读 `info`，切回本机再切回 SSH 仍各自正确。
-- 登录后切换连接方式：旧目标 `auth_sessions` 行被 `logout` 清掉（本机与远端各测一次）。
-- 真机再对一台 Linux/NAS 跑 `info`、`service install`、`service start`、linger 提示与 `open_page`（仅 Public URL）。
+- 开发态：`pnpm desktop:build` 后运行 `XDG_CONFIG_HOME=$PWD/tmp/xdg ./node_modules/.bin/electron desktop/dist/main.js --smoke`，确认渲染层加载、`system.status`、`desktop.openUrl` 拒绝分支并退出 0。
+- 打包态：先 `pnpm desktop:backend`，再 `pnpm desktop:pack:linux`；解压 `release/desktop/*.tar.gz` 后用同一个 `--smoke` 跑一次。日志里的 `[smoke] backend binary -> .../resources/bin/chat-deepseek (exists=true)` 说明 `extraResources` 与主进程路径解析都正确。
+- `--smoke` 窗口始终隐藏；本机验收不要裸跑可见窗口。
 
 ## 4. 发布流水线
 
 - `.github/workflows/release-{linux,windows,macos}.yml` 只接受手动触发（Actions → Release … → Run workflow）；push/tag/PR/schedule 不自动运行。
-- 每个 workflow 在原生 runner 完成 Web 构建、Go CLI 编译与 ZIP；Windows/macOS 额外 PyInstaller GUI。统一 pnpm 12.6、Node 24；Windows/macOS 用 Python 3.13、PyInstaller 6.22.3。
-- Linux 只构建 CLI（onefile 绑定构建机 glibc），包根目录含 `chat-deepseek`、`gui/`（源码副本）、`src/`（`git archive HEAD`）与三份文档；Windows 额外含预编译 GUI；macOS 只产出 DMG（`.app` + `/Applications` 链接），CLI、模板配置与文档在 `.app/Contents/Resources`。
-- 打包排除 `data/`、`node_modules/`、`gui/.venv` 与构建产物；Windows 不跑 `pnpm build`（脚本含 `rm -rf` 与 Unix 环境变量），改跑 `pnpm exec rspack build` + `node scripts/embed-ui.mjs`。
-- tag 运行时上传到同一个 GitHub Release，分支运行只保留 artifacts；三个 workflow 可并行，Release 创建/上传做重试。
-- Windows 未签名；macOS 仅 ad-hoc 签名，无公证。
+- 三个 workflow 步骤一致：checkout → pnpm 12.23 / Node 24 → `pnpm install --frozen-lockfile --allow-build '!electron-winstaller'` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）→ Go 构建 → `pnpm desktop:build` → electron-builder → 服务端 ZIP → artifact/Release。
+- Go 二进制统一由 `scripts/build-desktop-backend.mjs` 构建：`CGO_ENABLED=0`、`-trimpath`、`-ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}"`，输出 `desktop/build/backend/bin/chat-deepseek[.exe]`。tag 运行时 `VERSION` 是 tag 名（带 `v`），分支运行是提交 SHA；服务端 ZIP 复用同一份产物。
+- 桌面端配置在 `electron-builder.yml`：`appId=com.chatdeepseek.desktop`、`productName=chat-deepseek`、图标取 `desktop/build/whale.{png,icns,ico}`、`extraResources` 把 `desktop/build/backend/bin` 放到 `resources/bin`。输出在 `release/desktop/`，不复用根 `dist/`。
+- 平台 target：Linux 只出 `tar.gz`（不出 AppImage/deb），macOS 出未签名 `dmg`（`identity: null`），Windows 出 `nsis`；统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制。
+- 服务端 ZIP：`chat-deepseek-<VERSION>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不再包含 GUI 源码或整份 `src/`。
+- 桌面端产物：`chat-deepseek-desktop-<version>-linux-x86_64.tar.gz`、`-macos-arm64.dmg`、`-windows-x64.exe`（NSIS 安装包）；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`（不含 tag 的 `v`）。
+- 三个 workflow 可并行；tag 上运行时把服务端 ZIP 与桌面端安装包一起上传到同一个 Release，创建和上传做 6 次重试，避免同时创建时的竞态。分支运行只保留 artifacts（30 天）。
+- 打包会按需下载 Electron、NSIS 与 7zip：Linux 本机与 CI 首次运行需要网络；Windows runner 用原生 NSIS，macOS 用系统 `hdiutil`，不需要额外 Python/PyInstaller。
+- Windows 安装包未签名；macOS 包未签名、无公证。
 - `internal/webui/dist/*` 是生成物，不提交；只提交 `.gitkeep`。忘记 `pnpm build` 会得到占位页。
 
 ## 5. 版本与 tag
@@ -113,4 +101,3 @@ GUI：`gui/.venv/bin/python -m unittest discover -s gui/tests`；`gui/.venv` 不
 - **存储迁移**：v1 已移除 localStorage/IndexedDB，旧数据不自动迁移；需保留历史先用旧版导出 ZIP 再导入。
 - **README 语言**：只保留中文 `README.md`，英文版已删；README 是用户文档，试错/决策写这里而不是 README。
 - **UI 文案**：标题与 `appName` 为 `Deepseek`；字标用 DM Sans 700（OFL），鲸鱼标志来自 Simple Icons（CC0-1.0），来源与商标说明见 `THIRD_PARTY_NOTICES.md`。
-- **GUI 登录态**：复用 CLI 同一套会话，但启动不继承父 shell，关闭自动 `logout`。

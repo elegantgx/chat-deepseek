@@ -156,6 +156,31 @@ function toHostError(value: unknown): HostErrorPayload {
 }
 
 /**
+ * 解析要 spawn 的 Go 二进制：
+ * - 打包态只认 resources/bin（electron-builder 的 extraResources 落地位置），
+ *   不受 CHAT_DEEPSEEK_BIN / cwd 影响：安装版不应该被用户环境变量指到任意路径；
+ * - 开发态保持原有 env → 仓库根目录的逻辑，源码目录里直接跑 Electron 仍可用。
+ */
+function resolveBackendBinary(): string {
+  if (app.isPackaged) {
+    const name = process.platform === 'win32' ? 'chat-deepseek.exe' : 'chat-deepseek'
+    return path.join(process.resourcesPath, 'bin', name)
+  }
+  return process.env.CHAT_DEEPSEEK_BIN || path.join(process.cwd(), 'chat-deepseek')
+}
+
+/**
+ * 打包漏带二进制属于构建错误。提前给出可读原因，让 ipc 请求返回 backend_unavailable，
+ * 而不是等 spawn 到 ENOENT 才暴露（窗口仍正常显示，用户至少能看到设置页与错误）。
+ */
+function packagedBinaryMissingReason(binary: string): string | null {
+  if (!app.isPackaged || fs.existsSync(binary)) {
+    return null
+  }
+  return `打包内缺少后端二进制：${binary}（resources/bin 未随包分发，请检查 electron-builder 的 extraResources）`
+}
+
+/**
  * 与 Go 后端的 NDJSON / JSON-RPC 2.0 通道。
  * 桌面端不实现业务：这里只负责转发、按 id 配对、超时兜底，以及进程生命周期。
  */
@@ -166,9 +191,9 @@ class BackendProcess {
   /** stdout 是流，一条 JSON 可能被拆成多段，必须自己攒行 */
   private stdoutBuffer = ''
   private stopping = false
-  private readonly binary =
-    process.env.CHAT_DEEPSEEK_BIN || path.join(process.cwd(), 'chat-deepseek')
-  private unavailableReason = '后端尚未启动'
+  private readonly binary = resolveBackendBinary()
+  private readonly missingReason = packagedBinaryMissingReason(this.binary)
+  private unavailableReason = this.missingReason ?? '后端尚未启动'
 
   constructor(
     private readonly notify: (method: string, params: unknown) => void,
@@ -176,6 +201,11 @@ class BackendProcess {
   ) {}
 
   start(): void {
+    if (this.missingReason) {
+      // 不 spawn 不存在的路径：直接记录原因并让后续请求带可操作说明失败
+      this.markUnavailable(this.missingReason)
+      return
+    }
     // Go 侧还没实现 ipc 子命令时，这里会拿到用法错误并退出；不能因此崩掉窗口
     const child = spawn(this.binary, ['ipc', '--data-dir', this.dataDir], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -793,6 +823,11 @@ function bootstrap(): void {
   }
   dataDirSnapshot = snapshot
   traceDataDir()
+  if (smoke) {
+    // CI 排障专用：打包态最容易错的是 resources/bin 的路径与文件名（Windows .exe）
+    const binary = resolveBackendBinary()
+    console.log(`[smoke] backend binary -> ${binary} (exists=${fs.existsSync(binary)})`)
+  }
   backend = new BackendProcess(sendToRenderer, snapshot.current)
   backend.start()
   registerIpc()

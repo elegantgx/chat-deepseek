@@ -12,6 +12,7 @@ concurrency:
 
 env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+  CGO_ENABLED: '0'
 
 jobs:
   release:
@@ -24,14 +25,16 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 12.6.0
+          version: 12.23.0
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # electron-builder 的可选依赖 electron-winstaller（Squirrel.Windows 用）会触发
+        # pnpm 12 的构建审批错误；桌面端只出 NSIS，显式拒绝它的构建脚本。
+        run: pnpm install --frozen-lockfile --allow-build '!electron-winstaller'
       - name: Check types
         run: pnpm type
       - name: Lint
@@ -39,44 +42,54 @@ jobs:
       - name: Build web UI
         env:
           NODE_ENV: production
-        run: |
-          pnpm exec rspack build -c rspack.config.ts
-          node scripts/embed-ui.mjs
+        run: pnpm build
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build CLI
+      - name: Build Go binaries
         env:
-          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
         run: |
           set -euo pipefail
-          mkdir -p dist/linux-amd64
-          GOOS=linux GOARCH=amd64 go build -trimpath \
-            -ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}" \
-            -o dist/linux-amd64/chat-deepseek ./cmd/chat-deepseek
-      - name: Package
+          pnpm desktop:backend
+          mkdir -p tmp/release/server
+          install -m 0755 desktop/build/backend/bin/chat-deepseek tmp/release/server/chat-deepseek
+      - name: Build desktop bundles
+        run: pnpm desktop:build
+      - name: Package desktop (tar.gz)
+        run: |
+          set -euo pipefail
+          pnpm exec electron-builder --linux tar.gz --publish never
+          tarball=$(ls release/desktop/chat-deepseek-desktop-*-linux-x86_64.tar.gz)
+          # 后端二进制必须随包放在 resources/bin，否则打包后的桌面端只能显示 backend_unavailable
+          tar -tzf "$tarball" | grep -qE '^[^/]+/resources/bin/chat-deepseek$'
+          rm -rf tmp/verify
+          mkdir -p tmp/verify
+          tar -xzf "$tarball" -C tmp/verify
+          test -x tmp/verify/*/resources/bin/chat-deepseek
+          ls -lh "$tarball"
+      - name: Package server archive
         run: |
           set -euo pipefail
           archive="chat-deepseek-${VERSION}-linux-amd64.zip"
-          rm -rf release "${archive}"
-          mkdir -p release
-          install -m 0755 dist/linux-amd64/chat-deepseek release/chat-deepseek
-          mkdir -p release/src
-          git archive HEAD | tar -x -C release/src
-          git archive HEAD gui | tar -x -C release
-          cp README.md LICENSE THIRD_PARTY_NOTICES.md release/
-          chmod 0644 release/README.md release/LICENSE release/THIRD_PARTY_NOTICES.md
-          test ! -e release/chat-deepseek-gui
-          ./release/chat-deepseek version
-          (cd release && zip -9 -r "../${archive}" .)
-          ls -lh "${archive}"
-      - name: Upload archive
+          rm -f "$archive"
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md tmp/release/server/
+          chmod 0644 tmp/release/server/README.md tmp/release/server/LICENSE tmp/release/server/THIRD_PARTY_NOTICES.md
+          ./tmp/release/server/chat-deepseek version
+          (cd tmp/release/server && zip -9 -r "$GITHUB_WORKSPACE/${archive}" .)
+          unzip -l "$archive"
+          ls -lh "$archive"
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-linux-amd64
-          path: chat-deepseek-*-linux-amd64.zip
+          path: |
+            chat-deepseek-*-linux-amd64.zip
+            release/desktop/*.tar.gz
+          if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
@@ -85,13 +98,18 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          archive="$PWD/chat-deepseek-${VERSION}-linux-amd64.zip"
+          server="chat-deepseek-${VERSION}-linux-amd64.zip"
+          desktop=$(ls release/desktop/chat-deepseek-desktop-*-linux-x86_64.tar.gz)
+          test -f "$server"
+          test -f "$desktop"
+          assets=("$server" "$desktop")
+          # 三个 workflow 可能同时打到同一个 tag：创建/上传都按竞态重试
           for attempt in 1 2 3 4 5 6; do
             if gh release view "$tag" >/dev/null 2>&1; then
-              if gh release upload "$tag" "$archive" --clobber; then
+              if gh release upload "$tag" "${assets[@]}" --clobber; then
                 exit 0
               fi
-            elif gh release create "$tag" "$archive" --title "$tag" --generate-notes; then
+            elif gh release create "$tag" "${assets[@]}" --title "$tag" --generate-notes; then
               exit 0
             fi
             sleep 5

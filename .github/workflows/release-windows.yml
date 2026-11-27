@@ -12,7 +12,7 @@ concurrency:
 
 env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  CGO_ENABLED: '0'
 
 jobs:
   release:
@@ -28,14 +28,16 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 12.6.0
+          version: 12.23.0
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # electron-builder 的可选依赖 electron-winstaller（Squirrel.Windows 用）会触发
+        # pnpm 12 的构建审批错误；桌面端只出 NSIS，显式拒绝它的构建脚本。
+        run: pnpm install --frozen-lockfile --allow-build '!electron-winstaller'
       - name: Check types
         run: pnpm type
       - name: Lint
@@ -43,65 +45,47 @@ jobs:
       - name: Build web UI
         env:
           NODE_ENV: production
-        run: |
-          pnpm exec rspack build -c rspack.config.ts
-          node scripts/embed-ui.mjs
+        run: pnpm build
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build CLI
+      - name: Build Go binaries
         env:
-          CGO_ENABLED: "0"
           GOOS: windows
           GOARCH: amd64
         run: |
           $ErrorActionPreference = "Stop"
-          New-Item -ItemType Directory -Force dist\windows-amd64 | Out-Null
-          go build -trimpath -ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=$env:VERSION" -o dist\windows-amd64\chat-deepseek.exe ./cmd/chat-deepseek
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Install PyInstaller
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r gui/requirements.txt pyinstaller==6.22.3
-      - name: Build GUI
+          pnpm desktop:backend
+          New-Item -ItemType Directory -Force tmp\release\server | Out-Null
+          Copy-Item desktop\build\backend\bin\chat-deepseek.exe tmp\release\server\chat-deepseek.exe
+      - name: Build desktop bundles
+        run: pnpm desktop:build
+      - name: Package desktop (NSIS)
         run: |
           $ErrorActionPreference = "Stop"
-          python -m PyInstaller --noconfirm --clean --onefile --windowed `
-            --name chat-deepseek-gui `
-            --paths gui `
-            --icon "$env:GITHUB_WORKSPACE\gui\assets\whale.ico" `
-            --add-data "$env:GITHUB_WORKSPACE\gui\assets;assets" `
-            --distpath dist-gui `
-            --workpath build-gui `
-            --specpath build-gui `
-            gui/app.py
-          Get-Item dist-gui\chat-deepseek-gui.exe | Format-List Length,FullName
-      - name: Package
+          pnpm exec electron-builder --win nsis --publish never
+          $installer = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-desktop-*-windows-x64.exe" | Select-Object -First 1
+          if ($null -eq $installer) { throw "NSIS installer not found" }
+          Get-Item $installer.FullName | Format-List Length,FullName
+      - name: Package server archive
         run: |
           $ErrorActionPreference = "Stop"
           $archive = "chat-deepseek-$env:VERSION-windows-amd64.zip"
-          Remove-Item -Recurse -Force release -ErrorAction SilentlyContinue
           Remove-Item -Force $archive -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item dist/windows-amd64/chat-deepseek.exe release/chat-deepseek.exe
-          Copy-Item dist-gui/chat-deepseek-gui.exe release/chat-deepseek-gui.exe
-          git archive --format=zip --output=source.zip HEAD
-          Expand-Archive -Path source.zip -DestinationPath release/src -Force
-          Remove-Item source.zip
-          Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md release/
-          & .\release\chat-deepseek.exe version
-          Compress-Archive -Path release\* -DestinationPath $archive -Force
+          Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md tmp/release/server/
+          & .\tmp\release\server\chat-deepseek.exe version
+          Compress-Archive -Path tmp\release\server\* -DestinationPath $archive -Force
           Get-Item $archive | Format-List Length,FullName
-      - name: Upload archive
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-windows-amd64
-          path: chat-deepseek-*-windows-amd64.zip
+          path: |
+            chat-deepseek-*-windows-amd64.zip
+            release/desktop/*.exe
+          if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
@@ -111,22 +95,24 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
           $tag = $env:GITHUB_REF_NAME
-          $archive = Get-ChildItem -Path . -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
-          if ($null -eq $archive) {
-            throw "No release archive found"
-          }
+          $server = Get-ChildItem -Path . -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
+          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-desktop-*-windows-x64.exe" | Select-Object -First 1
+          if ($null -eq $server -or $null -eq $desktop) { throw "release assets not found" }
           # gh 把资产参数当作 glob；Windows 反斜杠会被当成转义符。
-          $archivePath = $archive.FullName -replace '\\', '/'
+          $assets = @(
+            ($server.FullName -replace '\\', '/'),
+            ($desktop.FullName -replace '\\', '/')
+          )
           $published = $false
           for ($attempt = 0; $attempt -lt 6 -and -not $published; $attempt++) {
             gh release view $tag *> $null
             if ($LASTEXITCODE -eq 0) {
-              gh release upload $tag $archivePath --clobber
+              gh release upload $tag $assets --clobber
               if ($LASTEXITCODE -eq 0) {
                 $published = $true
               }
             } else {
-              gh release create $tag $archivePath --title $tag --generate-notes
+              gh release create $tag $assets --title $tag --generate-notes
               if ($LASTEXITCODE -eq 0) {
                 $published = $true
               }

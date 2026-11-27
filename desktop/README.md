@@ -1,7 +1,8 @@
 # desktop/ — Electron 桌面端
 
 状态：**可用**。窗口、preload 桥、Go `ipc` 子进程、渲染层热更都通了；视觉按 `docs/desktop-visual.md`
-定稿，服务/账户/备份/设置四个页面已经接真实 `ipc`。打包、代码签名、自动更新还没做。
+定稿，服务/账户/备份/设置四个页面已经接真实 `ipc`。已接 electron-builder（Linux tar.gz / macOS 未签名 dmg /
+Windows NSIS）；代码签名、公证与自动更新还没做。
 
 技术选择：主进程/preload 用 `tsc` 直接编译（不额外引 bundler），渲染层用 rspack（`target: web`）打包，
 `index.html` 由 Electron `loadFile` 走 `file://` 加载。依赖全部复用仓库根 `node_modules`，
@@ -26,6 +27,7 @@ desktop/
     ui/              设计系统：token、按钮、卡片、表格、对话框、Toast 等
     gallery/         组件总览页（单独入口，验收视觉用）
   dist/              构建产物（根 .gitignore 已忽略）
+  build/             图标 whale.{png,ico,icns}；backend/bin 是生成的 Go 二进制（不提交）
 ```
 
 `desktop/package.json` 里的 `"type": "commonjs"` 是必需的，不是笔误：根 `package.json` 是
@@ -256,19 +258,74 @@ ELECTRON_ENABLE_LOGGING=1 ./node_modules/.bin/electron desktop/dist/main.js 2>&1
 xwininfo -root -tree | grep -i chat-deepseek
 ```
 
-## 发版
+## 打包
 
-**打包还没做**，当前只有 `desktop/dist/` 这一份可运行产物。正式发版前需要补：
+用 electron-builder 出三平台安装包，配置在仓库根 `electron-builder.yml`。产物写到 `release/desktop/`
+（已被根 `.gitignore` 的 `/release/` 覆盖），不使用根 `dist/`。
 
-1. 选 electron-builder 或 electron-forge 打包；`desktop/package.json` 的 `main` 已指向 `dist/main.js`。
-2. 把 Go 二进制作为 extraResource 随包分发，并用 `CHAT_DEEPSEEK_BIN` 指到 `process.resourcesPath` 下的路径
-   —— 现在默认值是 `process.cwd()`，打包后不可靠。
-3. 三平台产物、图标、代码签名、公证、自动更新都未做；版本号跟随根 `package.json`，桌面端不单独发版。
+先构建随包分发的 Go 后端，再编译主进程/渲染层，最后打包：
+
+```sh
+# 1) Go 后端 → desktop/build/backend/bin/chat-deepseek[.exe]
+#    GOOS/GOARCH 不设时跟随本机；tag 发布时用 VERSION 注入版本
+pnpm desktop:backend
+
+# 2) 主进程 tsc + 渲染层 rspack
+pnpm desktop:build
+
+# 3) 当前平台的安装包
+pnpm desktop:pack:linux   # release/desktop/chat-deepseek-desktop-<version>-linux-x86_64.tar.gz
+pnpm desktop:pack:mac     # ...-macos-arm64.dmg（未签名，identity: null）
+pnpm desktop:pack:win     # ...-windows-x64.exe（NSIS）
+```
+
+不想用脚本时等价于：
+
+```sh
+./node_modules/.bin/electron-builder --linux tar.gz --publish never
+```
+
+Linux tar.gz 解压后的结构：
+
+```text
+chat-deepseek-desktop-<version>-linux-x86_64/
+  chat-deepseek              Electron 可执行文件
+  resources/
+    app.asar                 desktop/dist（主进程、preload、渲染层）
+    bin/chat-deepseek        随包的 Go 后端
+  ...
+```
+
+- `extraResources` 把 `desktop/build/backend/bin/` 复制到 `resources/bin/`；主进程在 `app.isPackaged`
+  时从 `process.resourcesPath` 取（Windows 文件名是 `chat-deepseek.exe`）。开发态仍先看
+  `CHAT_DEEPSEEK_BIN`，否则用仓库根 `chat-deepseek`。打包态缺文件会返回可读的
+  `backend_unavailable` 原因，不会静默崩。
+- `desktop/package.json`（`"type": "commonjs"`）必须进 asar，且与 `desktop/dist/main.js` 保持最近关系；
+  根 `package.json` 只提供 `main` 与版本。漏掉会让打包后的主进程按 ESM 解析，直接起不来。
+- 只打进 `desktop/dist/**` 与两份 `package.json`，`node_modules` 被排除：主进程只用 electron/Node
+  内置模块，渲染层已由 rspack 打包。asar 里没有 `node_modules`，安装包体积主要来自 Electron 本身。
+- 版本取根 `package.json` 的 `0.1.5-official0.1.4`；`appId` 是 `com.chatdeepseek.desktop`；三个平台
+  的产物名都带平台与架构。
+
+本机验收用 `--smoke`（窗口始终 `show: false`，**不要裸跑可见窗口**）：
+
+```sh
+tar -xzf release/desktop/chat-deepseek-desktop-*-linux-x86_64.tar.gz -C /tmp
+XDG_CONFIG_HOME=$PWD/tmp/xdg /tmp/chat-deepseek-desktop-*/chat-deepseek --smoke
+```
+
+日志应包含 `[smoke] backend binary -> .../resources/bin/chat-deepseek (exists=true)`、
+`renderer loaded (window hidden)`、`system.status` 返回，以及 `desktop.openUrl file:// -> ERR:bad_request`，
+退出码 0。CI 的三个 workflow 用同一套 `desktop:backend` / `desktop:build` / electron-builder 命令。
+
+打包会按需下载 Electron、NSIS 与 7zip：Linux 本机首次需要网络。macOS/Windows 仅由 CI 构建，
+未在本机实机验证；两者都不签名。
 
 ## 已知限制 / 未覆盖
 
-1. **后端不自动重连**：Go 子进程退出后要重启应用；启动时若二进制不可用，所有请求都是
-   `backend_unavailable`（窗口仍显示）。没有重试、没有退避、没有进程守护。
+1. **后端不自动重连**：Go 子进程退出后要重启应用；启动时若二进制不可用（含打包漏带
+   `resources/bin`），所有请求都是 `backend_unavailable`（窗口仍显示，并带具体路径/原因）。
+   没有重试、没有退避、没有进程守护。
 2. **Go 侧 `ipc` 子命令的进度不在本骨架的控制范围内**：协议细节以 `docs/ipc.md` 为准；
    本骨架按「一行一个 JSON、`id` 回显、stdout 只有协议、日志走 stderr」实现。
 3. 渲染层没有 CSP、错误边界、i18n；路由只有 hash（`#service` 等），没有多窗口。

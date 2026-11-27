@@ -12,7 +12,9 @@ concurrency:
 
 env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  CGO_ENABLED: '0'
+  # 没有开发者证书；关闭 electron-builder 的证书自动发现，按 mac.identity: null 出未签名 dmg
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
   release:
@@ -27,14 +29,16 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 12.6.0
+          version: 12.23.0
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # electron-builder 的可选依赖 electron-winstaller（Squirrel.Windows 用）会触发
+        # pnpm 12 的构建审批错误；桌面端只出 NSIS，显式拒绝它的构建脚本。
+        run: pnpm install --frozen-lockfile --allow-build '!electron-winstaller'
       - name: Check types
         run: pnpm type
       - name: Lint
@@ -42,131 +46,48 @@ jobs:
       - name: Build web UI
         env:
           NODE_ENV: production
-        run: |
-          pnpm exec rspack build -c rspack.config.ts
-          node scripts/embed-ui.mjs
+        run: pnpm build
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build CLI
+      - name: Build Go binaries
         env:
-          CGO_ENABLED: "0"
           GOOS: darwin
           GOARCH: arm64
         run: |
           set -euo pipefail
-          mkdir -p dist/darwin-arm64
-          go build -trimpath \
-            -ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}" \
-            -o dist/darwin-arm64/chat-deepseek ./cmd/chat-deepseek
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Install PyInstaller
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r gui/requirements.txt pyinstaller==6.22.3
-      - name: Build GUI
+          pnpm desktop:backend
+          mkdir -p tmp/release/server
+          install -m 0755 desktop/build/backend/bin/chat-deepseek tmp/release/server/chat-deepseek
+      - name: Build desktop bundles
+        run: pnpm desktop:build
+      - name: Package desktop (dmg)
         run: |
           set -euo pipefail
-          python -m PyInstaller --noconfirm --clean --onefile \
-            --name chat-deepseek-gui \
-            --paths gui \
-            --add-data "${GITHUB_WORKSPACE}/gui/assets:assets" \
-            --distpath dist-gui \
-            --workpath build-gui \
-            --specpath build-gui \
-            gui/app.py
-          ls -lh dist-gui/chat-deepseek-gui
-      - name: Assemble macOS app
-        run: |
-          set -euo pipefail
-          bundle_version=$(python -c "import json; print(json.load(open('package.json'))['version'].split('-', 1)[0])")
-          app="$PWD/dist-gui/chat-deepseek-gui.app"
-          rm -rf "$app"
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-          install -m 0755 dist-gui/chat-deepseek-gui "$app/Contents/MacOS/chat-deepseek-gui"
-          install -m 0755 dist/darwin-arm64/chat-deepseek "$app/Contents/MacOS/chat-deepseek"
-          install -m 0644 gui/assets/whale.icns "$app/Contents/Resources/chat-deepseek-gui.icns"
-          cp README.md LICENSE THIRD_PARTY_NOTICES.md "$app/Contents/Resources/"
-          chmod 0644 "$app/Contents/Resources/README.md" "$app/Contents/Resources/LICENSE" "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
-          printf 'APPL????' > "$app/Contents/PkgInfo"
-          python - "$bundle_version" "$app" <<'PY'
-          import plistlib
-          import pathlib
-          import sys
-
-          version, bundle = sys.argv[1], pathlib.Path(sys.argv[2])
-          info = {
-              "CFBundleDevelopmentRegion": "zh_CN",
-              "CFBundleDisplayName": "chat-deepseek",
-              "CFBundleExecutable": "chat-deepseek-gui",
-              "CFBundleIconFile": "chat-deepseek-gui.icns",
-              "CFBundleIdentifier": "com.elegantgx.chat-deepseek",
-              "CFBundleInfoDictionaryVersion": "6.0",
-              "CFBundleName": "chat-deepseek-gui",
-              "CFBundlePackageType": "APPL",
-              "CFBundleShortVersionString": version,
-              "CFBundleVersion": version,
-              "LSApplicationCategoryType": "public.app-category.utilities",
-              "LSMinimumSystemVersion": "12.0",
-              "NSHighResolutionCapable": True,
-          }
-          (bundle / "Contents" / "Info.plist").write_bytes(
-              plistlib.dumps(info, fmt=plistlib.FMT_XML)
-          )
-          PY
-          python - "$app" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          app = pathlib.Path(sys.argv[1])
-          config = {
-              "version": 2,
-              "connection": "local",
-              "local": {
-                  "binary_dir": "",
-                  "data_dir": "~/Library/Application Support/chat-deepseek/data",
-                  "username": "",
-              },
-          }
-          (app / "Contents" / "Resources" / "config.gui.json").write_text(
-              json.dumps(config, ensure_ascii=False, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          PY
-          python -m json.tool "$app/Contents/Resources/config.gui.json" >/dev/null
-          codesign --force --deep --sign - "$app"
-          ls -lh "$app/Contents/MacOS/chat-deepseek-gui"
-      - name: Create DMG
-        run: |
-          set -euo pipefail
-          dmg="chat-deepseek-${VERSION}-macos-arm64.dmg"
-          root="$PWD/dist-dmg"
-          rm -rf "$root" "$dmg"
-          mkdir -p "$root"
-          ditto "$PWD/dist-gui/chat-deepseek-gui.app" "$root/chat-deepseek-gui.app"
-          ln -s /Applications "$root/Applications"
-          hdiutil create -volname "chat-deepseek" -srcfolder "$root" -ov -format UDZO "$dmg"
+          pnpm exec electron-builder --mac dmg --publish never
+          dmg=$(ls release/desktop/chat-deepseek-desktop-*-macos-arm64.dmg)
           ls -lh "$dmg"
-      - name: Package
+      - name: Package server archive
         run: |
           set -euo pipefail
           archive="chat-deepseek-${VERSION}-macos-arm64.zip"
-          dmg="chat-deepseek-${VERSION}-macos-arm64.dmg"
           rm -f "$archive"
-          zip -9 "$archive" "$dmg"
-          test "$(unzip -Z1 "$archive")" = "$dmg"
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md tmp/release/server/
+          chmod 0644 tmp/release/server/README.md tmp/release/server/LICENSE tmp/release/server/THIRD_PARTY_NOTICES.md
+          ./tmp/release/server/chat-deepseek version
+          (cd tmp/release/server && zip -9 -r "$GITHUB_WORKSPACE/${archive}" .)
+          unzip -l "$archive"
           ls -lh "$archive"
-      - name: Upload archive
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-macos-arm64
-          path: chat-deepseek-*-macos-arm64.zip
+          path: |
+            chat-deepseek-*-macos-arm64.zip
+            release/desktop/*.dmg
+          if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
@@ -175,13 +96,17 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          archive="$PWD/chat-deepseek-${VERSION}-macos-arm64.zip"
+          server="chat-deepseek-${VERSION}-macos-arm64.zip"
+          desktop=$(ls release/desktop/chat-deepseek-desktop-*-macos-arm64.dmg)
+          test -f "$server"
+          test -f "$desktop"
+          assets=("$server" "$desktop")
           for attempt in 1 2 3 4 5 6; do
             if gh release view "$tag" >/dev/null 2>&1; then
-              if gh release upload "$tag" "$archive" --clobber; then
+              if gh release upload "$tag" "${assets[@]}" --clobber; then
                 exit 0
               fi
-            elif gh release create "$tag" "$archive" --title "$tag" --generate-notes; then
+            elif gh release create "$tag" "${assets[@]}" --title "$tag" --generate-notes; then
               exit 0
             fi
             sleep 5
