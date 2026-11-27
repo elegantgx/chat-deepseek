@@ -19,6 +19,12 @@
 - 服务页可直接「打开页面」，也可在启动成功后自动打开一次；监听为 `0.0.0.0` / `::` / 空 host 时回落本机回环。
 - 设置页支持切换数据目录（写入 `desktop.json`，重启生效），并可只读查看 unit 安装状态与 linger；连接方式暂只支持本机回环，SSH 入口如实标注未实现。
 
+### 打包与发布
+
+- 桌面端用 electron-builder 打包：Linux 出 `tar.gz` 便携包（解压即用，不装 AppImage/deb），macOS 出未签名 dmg，Windows 出 NSIS 安装包；Go 后端随包放在 `resources/bin/`。
+- 服务端仍单独发布三平台 ZIP（headless 用浏览器访问），但不再附带 `src/` 与 GUI 源码，只留二进制与三份文档。
+- 三条发布流水线去掉 PyInstaller/PySide6，改为「Web 构建 → Go 二进制 → 桌面端构建 → electron-builder → 发布」。
+
 ### 其它
 
 - 移除 `gui/`（PySide6 外壳），桌面端由 `desktop/` 的 Electron 应用完全取代。
