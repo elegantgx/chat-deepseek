@@ -35,9 +35,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        # electron-builder 的可选依赖 electron-winstaller（Squirrel.Windows 用）会触发
-        # pnpm 12 的构建审批错误；桌面端只出 NSIS，显式拒绝它的构建脚本。
-        run: pnpm install --frozen-lockfile --allow-build '!electron-winstaller'
+        # electron-winstaller 的构建审批已记录在仓库根的 pnpm-workspace.yaml
+        run: pnpm install --frozen-lockfile
       - name: Check types
         run: pnpm type
       - name: Lint
@@ -51,40 +50,35 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build Go binaries
+      - name: Build Go backend
         env:
           GOOS: windows
           GOARCH: amd64
-        run: |
-          $ErrorActionPreference = "Stop"
-          pnpm desktop:backend
-          New-Item -ItemType Directory -Force tmp\release\server | Out-Null
-          Copy-Item desktop\build\backend\bin\chat-deepseek.exe tmp\release\server\chat-deepseek.exe
+        run: pnpm desktop:backend
       - name: Build desktop bundles
         run: pnpm desktop:build
-      - name: Package desktop (NSIS)
+      - name: Package desktop (zip)
         run: |
           $ErrorActionPreference = "Stop"
-          pnpm exec electron-builder --win nsis --publish never
-          $installer = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-desktop-*-windows-x64.exe" | Select-Object -First 1
-          if ($null -eq $installer) { throw "NSIS installer not found" }
-          Get-Item $installer.FullName | Format-List Length,FullName
-      - name: Package server archive
-        run: |
-          $ErrorActionPreference = "Stop"
-          $archive = "chat-deepseek-$env:VERSION-windows-amd64.zip"
-          Remove-Item -Force $archive -ErrorAction SilentlyContinue
-          Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md tmp/release/server/
-          & .\tmp\release\server\chat-deepseek.exe version
-          Compress-Archive -Path tmp\release\server\* -DestinationPath $archive -Force
-          Get-Item $archive | Format-List Length,FullName
+          $PSNativeCommandUseErrorActionPreference = $false
+          pnpm exec electron-builder --win zip --publish never
+          if ($LASTEXITCODE -ne 0) { throw "electron-builder failed" }
+          $archive = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
+          if ($null -eq $archive) { throw "desktop zip not found" }
+          Remove-Item -Recurse -Force tmp\verify -ErrorAction SilentlyContinue
+          Expand-Archive -Path $archive.FullName -DestinationPath tmp\verify -Force
+          $backend = Get-ChildItem -Path tmp\verify -Recurse -File -Filter chat-deepseek.exe | Where-Object { $_.FullName -match '\\resources\\bin\\' } | Select-Object -First 1
+          if ($null -eq $backend) { throw "backend binary missing from zip" }
+          $gui = Get-ChildItem -Path tmp\verify -Recurse -File -Filter chat-deepseek.exe | Where-Object { $_.FullName -notmatch '\\resources\\bin\\' } | Select-Object -First 1
+          if ($null -eq $gui) { throw "desktop executable missing from zip" }
+          & $backend.FullName version
+          if ($LASTEXITCODE -ne 0) { throw "backend binary failed to run" }
+          Get-Item $archive.FullName | Format-List Length,FullName
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-windows-amd64
-          path: |
-            chat-deepseek-*-windows-amd64.zip
-            release/desktop/*.exe
+          path: release/desktop/*-windows-amd64.zip
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
@@ -95,24 +89,20 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
           $tag = $env:GITHUB_REF_NAME
-          $server = Get-ChildItem -Path . -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
-          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-desktop-*-windows-x64.exe" | Select-Object -First 1
-          if ($null -eq $server -or $null -eq $desktop) { throw "release assets not found" }
+          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
+          if ($null -eq $desktop) { throw "release asset not found" }
           # gh 把资产参数当作 glob；Windows 反斜杠会被当成转义符。
-          $assets = @(
-            ($server.FullName -replace '\\', '/'),
-            ($desktop.FullName -replace '\\', '/')
-          )
+          $asset = $desktop.FullName -replace '\\', '/'
           $published = $false
           for ($attempt = 0; $attempt -lt 6 -and -not $published; $attempt++) {
             gh release view $tag *> $null
             if ($LASTEXITCODE -eq 0) {
-              gh release upload $tag $assets --clobber
+              gh release upload $tag $asset --clobber
               if ($LASTEXITCODE -eq 0) {
                 $published = $true
               }
             } else {
-              gh release create $tag $assets --title $tag --generate-notes
+              gh release create $tag $asset --title $tag --generate-notes
               if ($LASTEXITCODE -eq 0) {
                 $published = $true
               }

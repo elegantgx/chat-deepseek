@@ -32,9 +32,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - name: Install dependencies
-        # electron-builder 的可选依赖 electron-winstaller（Squirrel.Windows 用）会触发
-        # pnpm 12 的构建审批错误；桌面端只出 NSIS，显式拒绝它的构建脚本。
-        run: pnpm install --frozen-lockfile --allow-build '!electron-winstaller'
+        # electron-winstaller 的构建审批已记录在仓库根的 pnpm-workspace.yaml
+        run: pnpm install --frozen-lockfile
       - name: Check types
         run: pnpm type
       - name: Lint
@@ -59,22 +58,27 @@ jobs:
           install -m 0755 desktop/build/backend/bin/chat-deepseek tmp/release/server/chat-deepseek
       - name: Build desktop bundles
         run: pnpm desktop:build
-      - name: Package desktop (tar.gz)
+      - name: Package desktop (zip)
         run: |
           set -euo pipefail
-          pnpm exec electron-builder --linux tar.gz --publish never
-          tarball=$(ls release/desktop/chat-deepseek-desktop-*-linux-x86_64.tar.gz)
+          pnpm exec electron-builder --linux zip --publish never
+          archive=$(ls release/desktop/chat-deepseek-*-linux-amd64.zip)
           # 后端二进制必须随包放在 resources/bin，否则打包后的桌面端只能显示 backend_unavailable
-          tar -tzf "$tarball" | grep -qE '^[^/]+/resources/bin/chat-deepseek$'
+          unzip -l "$archive" | grep -qE 'resources/bin/chat-deepseek$'
           rm -rf tmp/verify
           mkdir -p tmp/verify
-          tar -xzf "$tarball" -C tmp/verify
-          test -x tmp/verify/*/resources/bin/chat-deepseek
-          ls -lh "$tarball"
+          unzip -q "$archive" -C tmp/verify
+          gui=$(find tmp/verify -type f -name chat-deepseek -not -path '*/resources/*' | head -n 1)
+          test -n "$gui"
+          backend=$(find tmp/verify -type f -path '*/resources/bin/chat-deepseek' | head -n 1)
+          test -n "$backend"
+          chmod +x "$backend"
+          "$backend" version
+          ls -lh "$archive"
       - name: Package server archive
         run: |
           set -euo pipefail
-          archive="chat-deepseek-${VERSION}-linux-amd64.zip"
+          archive="chat-deepseek-${VERSION}-linux-server-amd64.zip"
           rm -f "$archive"
           cp README.md LICENSE THIRD_PARTY_NOTICES.md tmp/release/server/
           chmod 0644 tmp/release/server/README.md tmp/release/server/LICENSE tmp/release/server/THIRD_PARTY_NOTICES.md
@@ -87,8 +91,8 @@ jobs:
         with:
           name: release-linux-amd64
           path: |
-            chat-deepseek-*-linux-amd64.zip
-            release/desktop/*.tar.gz
+            chat-deepseek-*-linux-server-amd64.zip
+            release/desktop/*-linux-amd64.zip
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
@@ -98,8 +102,8 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          server="chat-deepseek-${VERSION}-linux-amd64.zip"
-          desktop=$(ls release/desktop/chat-deepseek-desktop-*-linux-x86_64.tar.gz)
+          server="chat-deepseek-${VERSION}-linux-server-amd64.zip"
+          desktop=$(ls release/desktop/chat-deepseek-*-linux-amd64.zip)
           test -f "$server"
           test -f "$desktop"
           assets=("$server" "$desktop")

@@ -59,7 +59,7 @@ pnpm dev
 ### 3.4 Electron 桌面端（`--smoke`）
 
 - 开发态：`pnpm desktop:build` 后运行 `XDG_CONFIG_HOME=$PWD/tmp/xdg ./node_modules/.bin/electron desktop/dist/main.js --smoke`，确认渲染层加载、`system.status`、`desktop.openUrl` 拒绝分支并退出 0。
-- 打包态：先 `pnpm desktop:backend`，再 `pnpm desktop:pack:linux`；解压 `release/desktop/*.tar.gz` 后用同一个 `--smoke` 跑一次。日志里的 `[smoke] backend binary -> .../resources/bin/chat-deepseek (exists=true)` 说明 `extraResources` 与主进程路径解析都正确。
+- 打包态：先 `pnpm desktop:backend`，再 `pnpm desktop:pack:linux`；解压 `release/desktop/*-linux-amd64.zip` 后用同一个 `--smoke` 跑一次。日志里的 `[smoke] backend binary -> .../resources/bin/chat-deepseek (exists=true)` 说明 `extraResources` 与主进程路径解析都正确。
 - 空数据目录首次打开：服务页主操作变为「新建用户」并出现警告条，点击进入账户页；账户页显示
   「创建第一个用户」，提交后自动登录并进入账户列表，随后服务能正常启动。已有 Owner 但未登录时
   仍是登录表单和「启动服务」。
@@ -68,15 +68,15 @@ pnpm dev
 ## 4. 发布流水线
 
 - `.github/workflows/release-{linux,windows,macos}.yml` 只接受手动触发（Actions → Release … → Run workflow）；push/tag/PR/schedule 不自动运行。
-- 三个 workflow 步骤一致：checkout → pnpm 12.23 / Node 24 → `pnpm install --frozen-lockfile --allow-build '!electron-winstaller'` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）→ Go 构建 → `pnpm desktop:build` → electron-builder → 服务端 ZIP → artifact/Release。
-- Go 二进制统一由 `scripts/build-desktop-backend.mjs` 构建：`CGO_ENABLED=0`、`-trimpath`、`-ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}"`，输出 `desktop/build/backend/bin/chat-deepseek[.exe]`。tag 运行时 `VERSION` 是 tag 名（带 `v`），分支运行是提交 SHA；服务端 ZIP 复用同一份产物。
+- 三个 workflow 步骤一致：checkout → pnpm 12.23 / Node 24 → `pnpm install --frozen-lockfile`（electron-winstaller 的构建审批记录在 `pnpm-workspace.yaml`）→ `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）→ Go 构建 → `pnpm desktop:build` → electron-builder → artifact/Release；Linux 额外打服务端 ZIP。
+- Go 二进制统一由 `scripts/build-desktop-backend.mjs` 构建：`CGO_ENABLED=0`、`-trimpath`、`-ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}"`，输出 `desktop/build/backend/bin/chat-deepseek[.exe]`。tag 运行时 `VERSION` 是 tag 名（带 `v`），分支运行是提交 SHA；Linux 服务端 ZIP 复用同一份产物，macOS/Windows 只有桌面端 zip。
 - 桌面端配置在 `electron-builder.yml`：`appId=com.chatdeepseek.desktop`、`productName=chat-deepseek`、图标取 `desktop/build/whale.{png,icns,ico}`、`extraResources` 把 `desktop/build/backend/bin` 放到 `resources/bin`。输出在 `release/desktop/`，不复用根 `dist/`。
-- 平台 target：Linux 只出 `tar.gz`（不出 AppImage/deb），macOS 出未签名 `dmg`（`identity: null`），Windows 出 `nsis`；统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制。
-- 服务端 ZIP：`chat-deepseek-<VERSION>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不再包含 GUI 源码或整份 `src/`。
-- 桌面端产物：`chat-deepseek-desktop-<version>-linux-x86_64.tar.gz`、`-macos-arm64.dmg`、`-windows-x64.exe`（NSIS 安装包）；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`（不含 tag 的 `v`）。
-- 三个 workflow 可并行；tag 上运行时把服务端 ZIP 与桌面端安装包一起上传到同一个 Release，创建和上传做 6 次重试，避免同时创建时的竞态。分支运行只保留 artifacts（30 天）。
-- 打包会按需下载 Electron、NSIS 与 7zip：Linux 本机与 CI 首次运行需要网络；Windows runner 用原生 NSIS，macOS 用系统 `hdiutil`，不需要额外 Python/PyInstaller。
-- Windows 安装包未签名；macOS 包未签名、无公证。
+- 平台 target：三平台都只出 `zip`（Linux x64、macOS arm64、Windows x64），统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制；macOS 仍是 `identity: null` 未签名。
+- 服务端 ZIP 只发 Linux：`chat-deepseek-<VERSION>-linux-server-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`。
+- 桌面端产物：`chat-deepseek-<version>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`（不含 tag 的 `v`）。zip 根就是应用目录（macOS 根是 `chat-deepseek.app`），Go 后端（也是 CLI）在 `resources/bin/`。
+- 三个 workflow 可并行；tag 上运行时把服务端 ZIP（Linux）与桌面端 zip 一起上传到同一个 Release，创建和上传做 6 次重试，避免同时创建时的竞态。分支运行只保留 artifacts（30 天）。
+- 打包会按需下载 Electron 与 7zip 工具集：首次运行需要网络；不需要 NSIS、`hdiutil` 或 Python/PyInstaller。
+- Windows zip 未签名；macOS zip 未签名、无公证。
 - `internal/webui/dist/*` 是生成物，不提交；只提交 `.gitkeep`。忘记 `pnpm build` 会得到占位页。
 
 ## 5. 版本与 tag

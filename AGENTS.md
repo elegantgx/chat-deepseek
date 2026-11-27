@@ -109,8 +109,9 @@ go test ./... && go vet ./...
   **Android 自己的 ipc** 管启停/账户/备份/主机参数；本机仅监听回环、不能当服务端。
   **远程服务器只登录 + 聊天，App 不代管**（管理它要 SSH，不封装 SSH、不做远程运维面板）。
   当前只做**静态 UI 示意**，不写产品代码。
-- 打包：`electron-builder.yml` 出 Linux `tar.gz` / macOS `dmg` / Windows NSIS，服务端另有独立 zip；
-  Go 二进制随包放在 `resources/bin/`。**只有 Linux 本机验证过**，macOS/Windows 与自动更新未验证。
+- 打包：`electron-builder.yml` 三平台都只出便携 zip（Linux `chat-deepseek-<ver>-linux-amd64.zip`、
+  macOS `...-macos-arm64.zip`、Windows `...-windows-amd64.zip`），Go 二进制（也是 CLI）随包放在
+  `resources/bin/`；Linux 另发纯服务端 `...-linux-server-amd64.zip`。**只有 Linux 本机验证过**，macOS/Windows 与自动更新未验证。
 
 细节文档：
 
