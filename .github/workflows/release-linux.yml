@@ -67,7 +67,7 @@ jobs:
           unzip -l "$archive" | grep -qE 'resources/bin/chat-deepseek$'
           rm -rf tmp/verify
           mkdir -p tmp/verify
-          unzip -q "$archive" -C tmp/verify
+          unzip -q "$archive" -d tmp/verify
           gui=$(find tmp/verify -type f -name chat-deepseek -not -path '*/resources/*' | head -n 1)
           test -n "$gui"
           backend=$(find tmp/verify -type f -path '*/resources/bin/chat-deepseek' | head -n 1)
