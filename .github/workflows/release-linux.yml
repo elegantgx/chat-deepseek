@@ -78,7 +78,8 @@ jobs:
       - name: Package server archive
         run: |
           set -euo pipefail
-          archive="chat-deepseek-${VERSION}-linux-server-amd64.zip"
+          version=$(node -p "require('./package.json').version")
+          archive="chat-deepseek-v${version}-linux-server-amd64.zip"
           rm -f "$archive"
           cp README.md LICENSE THIRD_PARTY_NOTICES.md tmp/release/server/
           chmod 0644 tmp/release/server/README.md tmp/release/server/LICENSE tmp/release/server/THIRD_PARTY_NOTICES.md
@@ -102,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          server="chat-deepseek-${VERSION}-linux-server-amd64.zip"
+          server=$(ls chat-deepseek-*-linux-server-amd64.zip)
           desktop=$(ls release/desktop/chat-deepseek-*-linux-amd64.zip)
           test -f "$server"
           test -f "$desktop"

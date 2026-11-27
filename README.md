@@ -6,7 +6,7 @@
 
 ## 下载与安装
 
-发布页同时提供 Electron 桌面端（便携 zip，解压即用）和 Linux 服务端（headless，用浏览器访问）。macOS/Windows 只发桌面端包，包里带着同一份 CLI；Linux 如果只想下二进制跑服务端，用 `-server` 包。
+发布页同时提供 Electron 桌面端（便携 zip，解压即用）和 Linux 服务端（headless，用浏览器访问）。macOS/Windows 只发桌面端包，包里带着同一份 CLI；Linux 如果只想下二进制跑服务端，用 `-server` 包。文件名里的 `<版本>` 是带 `v` 的版本号，例如 `v0.1.5-official0.1.4`。
 
 ### Linux
 
@@ -95,7 +95,7 @@ CGO_ENABLED=0 go build -o chat-deepseek ./cmd/chat-deepseek
 | macOS   | 桌面端 `chat-deepseek-<版本>-macos-arm64.zip`                                                       |
 | Windows | 桌面端 `chat-deepseek-<版本>-windows-amd64.zip`                                                     |
 
-- 服务端 ZIP 的版本取自 tag 名（带 `v`）；在分支上手动运行时使用提交的 SHA。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本；桌面端 zip 名里的版本取 `package.json`，不含 `v`。
+- 所有 zip 的名字统一是 `v<package.json 版本>`，与发布 tag 一致（例如 `v0.1.5-official0.1.4`）。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本：tag 运行时是 tag 名，分支运行是提交 SHA。
 - 三平台都只出便携 zip（不出 NSIS/dmg/AppImage/deb/tar.gz），解压即用；命名带平台与架构，配置见 `electron-builder.yml`。
 - Linux 服务端 ZIP 只含二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不带 GUI 或整份 `src/`。
 - 桌面端把 Go 二进制（也是 CLI）放在 `resources/bin/`，macOS 上是 `chat-deepseek.app/Contents/Resources/bin/`；主进程在打包态从 `process.resourcesPath` 解析，开发态仍先看 `CHAT_DEEPSEEK_BIN`，否则用仓库根目录的 `chat-deepseek`。

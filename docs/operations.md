@@ -72,8 +72,8 @@ pnpm dev
 - Go 二进制统一由 `scripts/build-desktop-backend.mjs` 构建：`CGO_ENABLED=0`、`-trimpath`、`-ldflags "-s -w -X github.com/elegantgx/chat-deepseek/internal/buildinfo.Version=${VERSION}"`，输出 `desktop/build/backend/bin/chat-deepseek[.exe]`。tag 运行时 `VERSION` 是 tag 名（带 `v`），分支运行是提交 SHA；Linux 服务端 ZIP 复用同一份产物，macOS/Windows 只有桌面端 zip。
 - 桌面端配置在 `electron-builder.yml`：`appId=com.chatdeepseek.desktop`、`productName=chat-deepseek`、图标取 `desktop/build/whale.{png,icns,ico}`、`extraResources` 把 `desktop/build/backend/bin` 放到 `resources/bin`。输出在 `release/desktop/`，不复用根 `dist/`。
 - 平台 target：三平台都只出 `zip`（Linux x64、macOS arm64、Windows x64），统一 `--publish never`，发布只由 workflow 的 `gh` 步骤控制；macOS 仍是 `identity: null` 未签名。
-- 服务端 ZIP 只发 Linux：`chat-deepseek-<VERSION>-linux-server-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`。
-- 桌面端产物：`chat-deepseek-<version>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`（不含 tag 的 `v`）。zip 根就是应用目录（macOS 根是 `chat-deepseek.app`），Go 后端（也是 CLI）在 `resources/bin/`。
+- 服务端 ZIP 只发 Linux：`chat-deepseek-v<version>-linux-server-amd64.zip`，根目录只有二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`。
+- 桌面端产物：`chat-deepseek-v<version>-linux-amd64.zip`、`-macos-arm64.zip`、`-windows-amd64.zip`；`<version>` 取 `package.json` 的 `0.1.5-official0.1.4`，名字里的 `v` 与发布 tag 一致。zip 根就是应用目录（macOS 根是 `chat-deepseek.app`），Go 后端（也是 CLI）在 `resources/bin/`。
 - 三个 workflow 可并行；tag 上运行时把服务端 ZIP（Linux）与桌面端 zip 一起上传到同一个 Release，创建和上传做 6 次重试，避免同时创建时的竞态。分支运行只保留 artifacts（30 天）。
 - 打包会按需下载 Electron 与 7zip 工具集：首次运行需要网络；不需要 NSIS、`hdiutil` 或 Python/PyInstaller。
 - Windows zip 未签名；macOS zip 未签名、无公证。

@@ -273,8 +273,8 @@ pnpm desktop:backend
 # 2) 主进程 tsc + 渲染层 rspack
 pnpm desktop:build
 
-# 3) 当前平台的便携 zip
-pnpm desktop:pack:linux   # release/desktop/chat-deepseek-<version>-linux-amd64.zip
+# 3) 当前平台的便携 zip（名字里的 v 与发布 tag 一致）
+pnpm desktop:pack:linux   # release/desktop/chat-deepseek-v<version>-linux-amd64.zip
 pnpm desktop:pack:mac     # ...-macos-arm64.zip（未签名，identity: null）
 pnpm desktop:pack:win     # ...-windows-amd64.zip
 ```
