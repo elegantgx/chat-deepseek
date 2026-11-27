@@ -1,8 +1,8 @@
 # desktop/ — Electron 桌面端
 
 状态：**可用**。窗口、preload 桥、Go `ipc` 子进程、渲染层热更都通了；视觉按 `docs/desktop-visual.md`
-定稿，服务/账户/备份/设置四个页面已经接真实 `ipc`。已接 electron-builder（三平台便携 zip）；代码签名、
-公证与自动更新还没做。
+定稿，服务/账户/备份/设置四个页面已经接真实 `ipc`。已接 electron-builder（Linux/macOS 便携 zip、
+Windows NSIS 安装包）；代码签名、公证与自动更新还没做。
 
 技术选择：主进程/preload 用 `tsc` 直接编译（不额外引 bundler），渲染层用 rspack（`target: web`）打包，
 `index.html` 由 Electron `loadFile` 走 `file://` 加载。依赖全部复用仓库根 `node_modules`，
@@ -273,10 +273,10 @@ pnpm desktop:backend
 # 2) 主进程 tsc + 渲染层 rspack
 pnpm desktop:build
 
-# 3) 当前平台的便携 zip（名字里的 v 与发布 tag 一致）
+# 3) 当前平台的产物（名字里的 v 与发布 tag 一致）
 pnpm desktop:pack:linux   # release/desktop/chat-deepseek-v<version>-linux-amd64.zip
 pnpm desktop:pack:mac     # ...-macos-arm64.zip（未签名，identity: null）
-pnpm desktop:pack:win     # ...-windows-amd64.zip
+pnpm desktop:pack:win     # ...-windows-amd64-setup.exe（NSIS 安装包）
 ```
 
 不想用脚本时等价于：
@@ -296,6 +296,8 @@ resources/
 ```
 
 macOS 的 zip 根是 `chat-deepseek.app`，后端在 `chat-deepseek.app/Contents/Resources/bin/chat-deepseek`。
+Windows 只出 NSIS 单文件安装包：双击安装到用户目录，后端同样在 `<安装目录>\resources\bin\chat-deepseek.exe`；
+zip 解压出来是一堆 dll/resources，普通用户得在一堆文件里找 exe，所以 Windows 不再提供 zip。
 
 - `extraResources` 把 `desktop/build/backend/bin/` 复制到 `resources/bin/`；主进程在 `app.isPackaged`
   时从 `process.resourcesPath` 取（Windows 文件名是 `chat-deepseek.exe`）。开发态仍先看
@@ -319,7 +321,7 @@ XDG_CONFIG_HOME=$PWD/tmp/xdg /tmp/cds-smoke/chat-deepseek --smoke
 `renderer loaded (window hidden)`、`system.status` 返回，以及 `desktop.openUrl file:// -> ERR:bad_request`，
 退出码 0。CI 的三个 workflow 用同一套 `desktop:backend` / `desktop:build` / electron-builder 命令。
 
-打包会按需下载 Electron 与 7zip 工具集：首次运行需要网络。macOS/Windows 仅由 CI 构建，
+打包会按需下载 Electron、NSIS 与 7zip 工具集：首次运行需要网络。macOS/Windows 仅由 CI 构建，
 未在本机实机验证；两者都不签名。
 
 ## 已知限制 / 未覆盖

@@ -5,8 +5,8 @@
 # 输出统一写到 release/desktop（已被根 .gitignore 的 /release/ 覆盖），
 # 不复用根 dist/ —— 那是 Web UI 的构建目录。
 #
-# 三个平台都只出便携 zip：下载解压就能用，不做 NSIS/dmg/tar.gz 安装包。
-# zip 里的 Go 二进制既是 GUI 的后端，也是可单独使用的 CLI：
+# Linux/macOS 出便携 zip，Windows 出单文件 NSIS 安装包（见文件末尾的 nsis 段）。
+# 包里的 Go 二进制既是 GUI 的后端，也是可单独使用的 CLI：
 # Linux/Windows 在 <应用目录>/resources/bin/，macOS 在 chat-deepseek.app/Contents/Resources/bin/。
 appId: com.chatdeepseek.desktop
 productName: chat-deepseek
@@ -58,8 +58,18 @@ mac:
 
 win:
   target:
-    - target: zip
+    - target: nsis
       arch:
         - x64
   icon: desktop/build/whale.ico
-  artifactName: chat-deepseek-v${version}-windows-amd64.${ext}
+  artifactName: chat-deepseek-v${version}-windows-amd64-setup.${ext}
+
+# Windows 只出 NSIS 安装包：zip 解压是一堆 dll/resources，普通用户要在一堆文件里找 exe；
+# 单文件 setup 双击安装到用户目录，开始菜单/桌面快捷方式由安装器创建，不需要管理员权限。
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: chat-deepseek

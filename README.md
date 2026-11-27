@@ -20,7 +20,7 @@
 
 ### Windows
 
-- **桌面端**：`chat-deepseek-<版本>-windows-amd64.zip`，解压后运行 `chat-deepseek.exe`，不需要安装。未签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
+- **桌面端**：`chat-deepseek-<版本>-windows-amd64-setup.exe`，双击安装，可以选择安装目录并创建开始菜单/桌面快捷方式。未签名，SmartScreen 提示时点「更多信息 → 仍要运行」。
 
 桌面端和浏览器访问的是同一套本机服务：桌面端在后台启动 `chat-deepseek ipc` 并只监听回环，聊天界面在桌面窗口里；服务端压缩包则适合服务器、NAS 或只用浏览器的场景。
 

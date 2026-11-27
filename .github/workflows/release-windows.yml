@@ -57,28 +57,25 @@ jobs:
         run: pnpm desktop:backend
       - name: Build desktop bundles
         run: pnpm desktop:build
-      - name: Package desktop (zip)
+      - name: Package desktop (NSIS)
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
-          pnpm exec electron-builder --win zip --publish never
+          pnpm exec electron-builder --win nsis --publish never
           if ($LASTEXITCODE -ne 0) { throw "electron-builder failed" }
-          $archive = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
-          if ($null -eq $archive) { throw "desktop zip not found" }
-          Remove-Item -Recurse -Force tmp\verify -ErrorAction SilentlyContinue
-          Expand-Archive -Path $archive.FullName -DestinationPath tmp\verify -Force
-          $backend = Get-ChildItem -Path tmp\verify -Recurse -File -Filter chat-deepseek.exe | Where-Object { $_.FullName -match '\\resources\\bin\\' } | Select-Object -First 1
-          if ($null -eq $backend) { throw "backend binary missing from zip" }
-          $gui = Get-ChildItem -Path tmp\verify -Recurse -File -Filter chat-deepseek.exe | Where-Object { $_.FullName -notmatch '\\resources\\bin\\' } | Select-Object -First 1
-          if ($null -eq $gui) { throw "desktop executable missing from zip" }
-          & $backend.FullName version
+          $installer = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64-setup.exe" | Select-Object -First 1
+          if ($null -eq $installer) { throw "NSIS setup not found" }
+          # 后端二进制必须打进安装包：先在 electron-builder 的 win-unpacked 里确认它能跑
+          $backend = "release\desktop\win-unpacked\resources\bin\chat-deepseek.exe"
+          if (-not (Test-Path $backend)) { throw "backend binary missing from win-unpacked" }
+          & $backend version
           if ($LASTEXITCODE -ne 0) { throw "backend binary failed to run" }
-          Get-Item $archive.FullName | Format-List Length,FullName
+          Get-Item $installer.FullName | Format-List Length,FullName
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: release-windows-amd64
-          path: release/desktop/*-windows-amd64.zip
+          path: release/desktop/*-windows-amd64-setup.exe
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release
@@ -89,7 +86,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
           $tag = $env:GITHUB_REF_NAME
-          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64.zip" | Select-Object -First 1
+          $desktop = Get-ChildItem -Path release\desktop -File -Filter "chat-deepseek-*-windows-amd64-setup.exe" | Select-Object -First 1
           if ($null -eq $desktop) { throw "release asset not found" }
           # gh 把资产参数当作 glob；Windows 反斜杠会被当成转义符。
           $asset = $desktop.FullName -replace '\\', '/'

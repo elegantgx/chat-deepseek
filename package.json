@@ -17,7 +17,7 @@
     "desktop:pack": "electron-builder --publish never",
     "desktop:pack:linux": "electron-builder --linux zip --publish never",
     "desktop:pack:mac": "electron-builder --mac zip --publish never",
-    "desktop:pack:win": "electron-builder --win zip --publish never",
+    "desktop:pack:win": "electron-builder --win nsis --publish never",
     "desktop:start": "./node_modules/.bin/electron desktop/dist/main.js",
     "desktop:check": "./node_modules/.bin/tsc -p desktop/tsconfig.json --noEmit"
   },
