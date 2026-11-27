@@ -81,27 +81,6 @@ CGO_ENABLED=0 go build -o chat-deepseek ./cmd/chat-deepseek
 - 退出码：`0` 成功、`1` 运行错误、`2` 用法错误、`3` 未登录或登录过期、`4` 权限不足。
 - `user list`、`whoami`、`backup list`、`info`、`service status` 的文本列是稳定契约；脚本依赖这些格式，改动要同步使用方。
 
-## 发布流水线
-
-`.github/workflows/release-{linux,macos,windows}.yml` 是三个手动触发的 GitHub Actions 工作流：在 Actions 里选择 Release Linux、Release macOS 或 Release Windows，点击 Run workflow；push、标签、Pull Request 和定时任务都不会自动触发。在 tag 上运行会把产物发到同一个 GitHub Release，在分支上运行只保留 Actions artifacts（30 天）。
-
-每个工作流都跑同样的门禁：`pnpm install --frozen-lockfile` → `pnpm type` → `pnpm lint` → `pnpm build`（Web UI 进 `internal/webui/dist`）；然后用 `CGO_ENABLED=0` 构建同一份 Go 二进制（Linux 服务端包与桌面端 `resources/bin` 复用），`pnpm desktop:build` 编译主进程与渲染层，最后由 electron-builder 出便携 zip。
-
-产物矩阵：
-
-| 平台    | 服务端（headless）                            | 桌面端（便携 zip）                              |
-| ------- | --------------------------------------------- | ----------------------------------------------- |
-| Linux   | `chat-deepseek-<版本>-linux-server-amd64.zip` | `chat-deepseek-<版本>-linux-amd64.zip`          |
-| macOS   | —                                             | `chat-deepseek-<版本>-macos-arm64.zip`          |
-| Windows | —                                             | `chat-deepseek-<版本>-windows-amd64.zip`        |
-
-- 版本取自 tag 名（带 `v`），例如 `v0.1.5-official0.1.4`。Go 二进制通过 `-ldflags "-s -w -X ...buildinfo.Version=${VERSION}"` 注入版本。
-- 三平台都只出便携 zip（不出 NSIS/dmg/AppImage/deb/tar.gz），解压即用；命名带平台与架构，配置见 `electron-builder.yml`。
-- Linux 服务端 ZIP 只含二进制与 `README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`，不再附带 GUI 源码或整份 `src/`。
-- 桌面端把 Go 二进制放在 `resources/bin/`；主进程在打包态从 `process.resourcesPath` 解析，开发态仍先看 `CHAT_DEEPSEEK_BIN`，否则用仓库根目录的 `chat-deepseek`。
-- 三份 workflow 可以并行；发布步骤对同一 tag 的 Release 创建和上传做 6 次重试，避免同时创建时的竞态。
-- macOS 包未签名，首次打开按住 Control 点按应用 →「打开」，或执行 `xattr -cr`；Windows 包未签名，可能出现 SmartScreen 提示。
-
 ## 命令行登录
 
 `user ...` 和 `backup ...` 需要先登录。登录态按 shell 隔离：每个终端各自 `login`，互不覆盖；固定 15 分钟后过期，不随命令续期。
